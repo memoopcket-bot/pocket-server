@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pocket Option Management Panel</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f0f12; color: #e5e5e7; text-align: center; padding: 50px 20px; }
+        .panel-box { max-width: 550px; margin: auto; background: #1a1a24; padding: 40px; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.6); border: 1px solid #2d2d3d; }
+        h2 { color: #ffffff; margin-bottom: 10px; font-weight: 600; }
+        p { color: #9a9aab; font-size: 14px; margin-bottom: 30px; }
+        input[type="text"] { width: 100%; padding: 14px; margin-bottom: 20px; border: 1px solid #3d3d52; background: #0f0f12; color: #ffffff; border-radius: 8px; font-size: 15px; box-sizing: border-box; transition: 0.3s; }
+        input[type="text"]:focus { border-color: #007bff; outline: none; box-shadow: 0 0 8px rgba(0,123,255,0.4); }
+        button { background: linear-gradient(135deg, #007bff, #0056b3); color: white; border: none; padding: 14px; font-size: 16px; border-radius: 8px; cursor: pointer; width: 100%; font-weight: bold; letter-spacing: 0.5px; box-shadow: 0 4px 15px rgba(0,123,255,0.3); transition: 0.3s; }
+        button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,123,255,0.5); }
+        .footer-note { margin-top: 25px; font-size: 12px; color: #62627a; }
+    </style>
+</head>
+<body>
+
+    <div class="panel-box">
+        <h2>Pocket Option Web Panel</h2>
+        <p>Enter your session credentials below to sync with the cloud server.</p>
+        
+        <form method="GET" action="/">
+            <input type="text" name="ssid" placeholder="Enter your SSID Token here..." required autocomplete="off">
+            <button type="submit">Deploy Session & Connect</button>
+        </form>
+
+        <div class="footer-note">
+            Secure browser session. Tokens are processed directly in your container instance.
+        </div>
+    </div>
+
+</body>
+</html>
+
