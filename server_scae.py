@@ -32,8 +32,10 @@ async def handle_connect(request):
     if not ssid_input:
         return web.json_response({"error": "SSID is required"}, status=400)
     
+    # Core Fix: Automatically clean escaped backslashes from the raw input string
+    ssid_input = ssid_input.replace('\\"', '"').replace('\\\\', '\\')
     current_ssid = ssid_input
-    print("🔄 Dynamic SSID payload injected into backend router.")
+    print("🔄 Cleaned raw SSID payload injected into backend router.")
     
     # Trigger active loop connection
     if websocket_task:
@@ -117,7 +119,7 @@ async def pocket_option_websocket_loop():
                             if isinstance(parsed, list) and len(parsed) > 1:
                                 msg_type = parsed[0]
                                 msg_data = parsed[1]
-                                # Capture realtime closing prices array buffer
+                                # Capture realtime closing prices or active tick pool values
                                 if msg_type == "candles" or msg_type == "tick":
                                     asset_id = msg_data.get("asset")
                                     if asset_id in ALL_ASSETS:
@@ -142,7 +144,6 @@ def create_app():
     return app
 
 if __name__ == "__main__":
-    # Standard Render enforcement port bound mapping setup
     port = int(os.environ.get("PORT", 10000))
     app = create_app()
     print(f"Starting standard microserver engine on port {port}")
