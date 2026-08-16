@@ -3,35 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pocket Option Management Panel</title>
+    <title>Pocket Option Real-Time Stream</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f0f12; color: #e5e5e7; text-align: center; padding: 50px 20px; }
-        .panel-box { max-width: 550px; margin: auto; background: #1a1a24; padding: 40px; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.6); border: 1px solid #2d2d3d; }
-        h2 { color: #ffffff; margin-bottom: 10px; font-weight: 600; }
-        p { color: #9a9aab; font-size: 14px; margin-bottom: 30px; }
-        input[type="text"] { width: 100%; padding: 14px; margin-bottom: 20px; border: 1px solid #3d3d52; background: #0f0f12; color: #ffffff; border-radius: 8px; font-size: 15px; box-sizing: border-box; transition: 0.3s; }
-        input[type="text"]:focus { border-color: #007bff; outline: none; box-shadow: 0 0 8px rgba(0,123,255,0.4); }
-        button { background: linear-gradient(135deg, #007bff, #0056b3); color: white; border: none; padding: 14px; font-size: 16px; border-radius: 8px; cursor: pointer; width: 100%; font-weight: bold; letter-spacing: 0.5px; box-shadow: 0 4px 15px rgba(0,123,255,0.3); transition: 0.3s; }
-        button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,123,255,0.5); }
-        .footer-note { margin-top: 25px; font-size: 12px; color: #62627a; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f0f12; color: #e5e5e7; text-align: center; padding: 40px 20px; }
+        .panel-box { max-width: 600px; margin: auto; background: #1a1a24; padding: 40px; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.6); border: 1px solid #2d2d3d; }
+        h2 { color: #ffffff; margin-bottom: 5px; font-weight: 600; }
+        p { color: #9a9aab; font-size: 14px; margin-bottom: 25px; }
+        textarea { width: 100%; height: 100px; padding: 12px; border: 1px solid #3d3d52; background: #0f0f12; color: #ffffff; border-radius: 8px; font-size: 14px; box-sizing: border-box; resize: none; margin-bottom: 20px; }
+        textarea:focus { border-color: #28a745; outline: none; }
+        button { background: linear-gradient(135deg, #28a745, #1e7e34); color: white; border: none; padding: 14px; font-size: 16px; border-radius: 8px; cursor: pointer; width: 100%; font-weight: bold; box-shadow: 0 4px 15px rgba(40,167,69,0.3); transition: 0.3s; }
+        button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(40,167,69,0.5); }
+        .ticker-container { margin-top: 30px; background: #0f0f12; padding: 20px; border-radius: 10px; border: 1px dashed #3d3d52; }
+        .price-display { font-size: 32px; font-weight: bold; color: #28a745; margin-top: 10px; font-family: 'Courier New', Courier, monospace; }
+        .loading { color: #ffc107; font-style: italic; }
     </style>
 </head>
 <body>
 
     <div class="panel-box">
-        <h2>Pocket Option Web Panel</h2>
-        <p>Enter your session credentials below to sync with the cloud server.</p>
+        <h2>Pocket Option Ticker Stream</h2>
+        <p>Paste the full 42["auth",...] payload below to connect the authenticated pricing stream.</p>
         
         <form method="GET" action="/">
-            <input type="text" name="ssid" placeholder="Enter your SSID Token here..." required autocomplete="off">
-            <button type="submit">Deploy Session & Connect</button>
+            <textarea name="payload" placeholder="Paste full raw authentication payload packet here..." required></textarea>
+            <button type="submit">Stream Live Prices</button>
         </form>
 
-        <div class="footer-note">
-            Secure browser session. Tokens are processed directly in your container instance.
+        <div class="ticker-container">
+            <strong>EUR/USD Live Asset Price:</strong>
+            <div id="price" class="price-display"><span class="loading">Awaiting Connection Stream...</span></div>
         </div>
     </div>
 
+    <script>
+        // Auto-fetch newly arriving ticks from the server container instance every 1 second
+        setInterval(async () => {
+            try {
+                const response = await fetch('/api/prices');
+                const data = await response.json();
+                if (data && data.EURUSD) {
+                    const priceElement = document.getElementById('price');
+                    // Format tick output cleanly from pocket option array buffer
+                    priceElement.innerText = JSON.stringify(data.EURUSD);
+                    priceElement.style.color = "#28a745";
+                }
+            } catch (e) {
+                console.log("Waiting for data stream packets...");
+            }
+        }, 1000);
+    </script>
+
 </body>
 </html>
-
