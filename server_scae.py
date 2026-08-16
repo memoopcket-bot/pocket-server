@@ -1,48 +1,43 @@
 import asyncio
 import threading
+import json
 from http.server import SimpleHTTPRequestHandler, HTTPServer
-from pocketoptionapi.stable_api import PocketOptionAPI  # المكتبة الحديثة لسحب الأسعار
+import websockets
 
-# 1. كود تشغيل السيرفر لـ Render لحمايته من الإغلاق
+# 1. كود تشغيل ويب سيرفر لضمان بقاء السيرفر حياً في Render
 class MyServer(SimpleHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-type", "text/html; charset=utf-8")
         self.end_headers()
-        self.wfile.write(bytes("سيرفر جلب أسعار بوكت اوبشن يعمل بنجاح سحابياً!", "utf-8"))
+        self.wfile.write(bytes("سيرفر جلب أسعار بوكت اوبشن اللحظية يعمل سحابياً بنجاح!", "utf-8"))
 
 def run_http_server():
     server = HTTPServer(('0.0.0.0', 10000), MyServer)
     print("HTTP Server started on port 10000...")
     server.serve_forever()
 
-# 2. كود جلب الأسعار اللحظية عبر الـ WebSocket للمكتبة الحديثة
-async def fetch_pocket_option_prices():
-    # استبدل الـ SSID بالرمز الخاص بحسابك المستخرج من المتصفح لتوثيق الاتصال
-    ssid = 'YOUR_POCKET_OPTION_SSID_HERE' 
+# 2. كود جلب الأسعار اللحظية المباشر عبر الـ WebSocket
+async def get_live_prices():
+    # الرابط السريع والخفيف لـ WebSocket منصة بوكت اوبشن
+    uri = "wss://api-prod.po.market/v1/v2/websocket"
     
-    print("جاري الاتصال بـ Pocket Option WebSocket...")
-    api = PocketOptionAPI(ssid)
-    success = await api.connect()
-    
-    if success:
-        print("تم الاتصال بنجاح! جاري سحب الأسعار اللحظية لأزواج العملات...")
-        # اشتراك في سحب أسعار زوج معين لحظياً كمثال (اليورو مقابل الدولار)
-        await api.subscribe_to_asset("EURUSD")
-        
-        # حلقة تكرارية لطباعة الأسعار اللحظية فور وصولها
-        while True:
-            prices = api.get_realtime_candles("EURUSD")
-            if prices:
-                print(f"السعر اللحظي الحالي: {prices[-1]}")
-            await asyncio.sleep(1) # انتظر ثانية وجدد السعر
-    else:
-        print("فشل الاتصال، يرجى التحقق من صلاحية الـ SSID الخاص بك.")
+    print("جاري محاولة الاتصال بـ Pocket Option WebSocket...")
+    try:
+        async with websockets.connect(uri) as websocket:
+            print("تم الاتصال بنجاح! السيرفر يستقبل البيانات اللحظية الآن...")
+            
+            # حلقة مستمرة لقراءة البيانات اللحظية فوراً
+            while True:
+                response = await websocket.recv()
+                print(f"البيانات اللحظية المستلمة: {response}")
+                await asyncio.sleep(1)
+    except Exception as e:
+        print(f"حدث انقطاع أو خطأ في الاتصال: {e}")
 
 if __name__ == "__main__":
-    # تشغيل سيرفر الويب في خلفية مستقلة (Thread) حتى لا يتعطل Render
+    # تشغيل سيرفر الويب في خلفية مستقلة (Thread) حتى لا يتعطل البناء
     threading.Thread(target=run_http_server, daemon=True).start()
     
-    # تشغيل مهمة جلب الأسعار اللحظية المستمرة
-    asyncio.run(fetch_pocket_option_prices())
-
+    # تشغيل حلقة جلب الأسعار اللحظية بشكل مستمر
+    asyncio.run(get_live_prices())
