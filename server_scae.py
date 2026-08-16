@@ -32,12 +32,11 @@ async def handle_connect(request):
     if not ssid_input:
         return web.json_response({"error": "SSID is required"}, status=400)
     
-    # Core Fix: Automatically clean escaped backslashes from the raw input string
+    # Clean escaped quotes coming from specific client devices
     ssid_input = ssid_input.replace('\\"', '"').replace('\\\\', '\\')
     current_ssid = ssid_input
-    print("🔄 Cleaned raw SSID payload injected into backend router.")
+    print("🔄 Dynamic SSID payload injected into backend router.")
     
-    # Trigger active loop connection
     if websocket_task:
         websocket_task.cancel()
     websocket_task = asyncio.create_task(pocket_option_websocket_loop())
@@ -75,7 +74,7 @@ async def handle_status(request):
         "total_assets": len(ALL_ASSETS)
     })
 
-# 2. Main Verified Pocket Option Connection Loop
+# 2. Advanced Bypassing Pocket Option Connection Loop
 async def pocket_option_websocket_loop():
     global current_ssid, live_prices
     uri = "wss://api-eu.po.market/v1/v2/websocket"
@@ -89,7 +88,6 @@ async def pocket_option_websocket_loop():
             async with websockets.connect(uri, open_timeout=15, extra_headers=headers) as websocket:
                 print("✅ Securely handshake established with Pocket Option pipeline.")
                 
-                # Format full validation packet with proper current epoch timestamps
                 auth_packet = current_ssid
                 current_epoch = int(time.time())
                 auth_packet = re.sub(r'i:\d+;', f'i:{current_epoch};', auth_packet)
@@ -98,32 +96,53 @@ async def pocket_option_websocket_loop():
                 
                 await websocket.send(auth_packet)
                 print("🔑 Authenticated session tracking packet sent.")
+                await asyncio.sleep(1)
                 
-                # Bulk subscription request for the targeted dynamic assets
+                # Active subscription to stream channels
                 for asset in ALL_ASSETS:
                     sub_msg = f'42["subscribe_candles",_wrap_asset_sub("{asset}")]'
                     sub_msg = f'42["subscribe_candles",{{"asset":"{asset}","period":60}}]'
                     await websocket.send(sub_msg)
+                    
+                    tick_msg = f'42["load_candles",_wrap_asset_sub("{asset}")]'
+                    tick_msg = f'42["load_candles",{{"asset":"{asset}","period":60}}]'
+                    await websocket.send(tick_msg)
                 
                 while current_ssid:
                     response = await websocket.recv()
                     
-                    # Core engine connection maintainer
                     if response == "2":
                         await websocket.send("3")
                         continue
                     
                     if response.startswith("42"):
                         try:
-                            parsed = ujson.loads(response[2:])
+                            raw_json = response[2:]
+                            parsed = ujson.loads(raw_json)
+                            
                             if isinstance(parsed, list) and len(parsed) > 1:
                                 msg_type = parsed[0]
                                 msg_data = parsed[1]
-                                # Capture realtime closing prices or active tick pool values
-                                if msg_type == "candles" or msg_type == "tick":
-                                    asset_id = msg_data.get("asset")
-                                    if asset_id in ALL_ASSETS:
-                                        live_prices[asset_id] = msg_data.get("close") or msg_data.get("price", 0.0)
+                                
+                                # High-speed extension-aligned dictionary and list matching sequence
+                                if msg_type in ["tick", "candles", "candle"]:
+                                    if isinstance(msg_data, dict):
+                                        asset_id = msg_data.get("asset")
+                                        if asset_id in ALL_ASSETS:
+                                            # Grab native floating price point values matching extension logic
+                                            raw_price = msg_data.get("price") or msg_data.get("close")
+                                            if raw_price is not None:
+                                                live_prices[asset_id] = float(raw_price)
+                                                
+                                    elif isinstance(msg_data, list):
+                                        # Extension Core Fix: Safely loops multi-asset array buffers arriving from pool
+                                        for item in msg_data:
+                                            if isinstance(item, dict):
+                                                asset_id = item.get("asset")
+                                                if asset_id in ALL_ASSETS:
+                                                    raw_price = item.get("price") or item.get("close")
+                                                    if raw_price is not None:
+                                                        live_prices[asset_id] = float(raw_price)
                         except Exception:
                             pass
                     await asyncio.sleep(0.01)
