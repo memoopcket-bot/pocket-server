@@ -1,5 +1,2 @@
-pocketoptionapi-async
 websockets
-pydantic
-loguru
-
+requests
