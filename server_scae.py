@@ -2,6 +2,8 @@ import asyncio
 import threading
 import ujson
 import urllib.parse
+import time
+import re
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 import websockets
 
@@ -16,7 +18,6 @@ class MyServer(SimpleHTTPRequestHandler):
         parsed_url = urllib.parse.urlparse(self.path)
         params = urllib.parse.parse_qs(parsed_url.query)
         
-        # API endpoint for frontend UI to fetch live price updates
         if parsed_url.path == '/api/prices':
             self.send_response(200)
             self.send_header("Content-type", "application/json")
@@ -28,7 +29,7 @@ class MyServer(SimpleHTTPRequestHandler):
             raw_input = params['payload'].strip()
             if raw_input:
                 current_payload = raw_input
-                print("🔄 Protected raw token update deployed successfully!")
+                print("🔄 Dynamic Payload Injected into Backend Pipeline.")
                 if loop and loop.is_running():
                     asyncio.run_coroutine_threadsafe(restart_websocket(), loop)
         
@@ -69,7 +70,6 @@ async def get_live_prices_loop():
         "wss://api-prod.po.market/v1/v2/websocket"
     ]
     
-    # Updated headers matching 2006 browser fingerprints
     extra_headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "Origin": "https://pocketoption.com"
@@ -84,16 +84,21 @@ async def get_live_prices_loop():
             if not current_payload:
                 break
             try:
-                # Upgraded connect parameters for modern websockets library
                 async with websockets.connect(uri, open_timeout=15, extra_headers=extra_headers) as websocket:
                     print(f"🎯 Successfully connected to live feed pool: {uri}")
                     
                     auth_string = current_payload
+                    
+                    # Core fix: Dynamically update the session timestamp to current epoch time
+                    current_epoch = int(time.time())
+                    auth_string = re.sub(r'i:\d+;', f'i:{current_epoch};', auth_string)
+                    
                     if auth_string.startswith("42"):
                         auth_string = auth_string[2:]
                     
+                    # Transmit fresh timestamped packet
                     await websocket.send(f"42{auth_string}")
-                    print("🔒 Session synchronization payload broadcasted.")
+                    print("🔒 Session synchronization payload broadcasted with fresh timestamp.")
                     
                     # Requesting active ticks stream for OTC pair
                     subscribe_msg = '42["subscribe_candles",{"asset":"EURUSD_otc","period":60}]'
@@ -101,12 +106,19 @@ async def get_live_prices_loop():
                     
                     while current_payload:
                         response = await websocket.recv()
+                        
+                        # Handle Keep-Alive Engine (Ping/Pong)
+                        if response == "2":
+                            await websocket.send("3")
+                            print("🏓 Ping-Pong Keep-Alive Executed.")
+                            continue
+                            
                         if response.startswith("42"):
                             try:
-                                # Ultra-fast JSON stripping using native ujson
                                 raw_json = response[2:]
                                 parsed_data = ujson.loads(raw_json)
-                                if len(parsed_data) > 1:
+                                # Capture incoming market values
+                                if isinstance(parsed_data, list) and len(parsed_data) > 0:
                                     live_prices_cache["EURUSD"] = parsed_data
                                     print(f"📈 Match incoming tick stream: {parsed_data}")
                             except Exception:
