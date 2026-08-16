@@ -1,43 +1,52 @@
 import asyncio
 import threading
-import json
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 import websockets
 
-# 1. كود تشغيل ويب سيرفر لضمان بقاء السيرفر حياً في Render
+# 1. Web Server for Render Health Check
 class MyServer(SimpleHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-type", "text/html; charset=utf-8")
         self.end_headers()
-        self.wfile.write(bytes("سيرفر جلب أسعار بوكت اوبشن اللحظية يعمل سحابياً بنجاح!", "utf-8"))
+        self.wfile.write(bytes("Pocket Option Live Price Server is Running Successfully!", "utf-8"))
 
 def run_http_server():
-    server = HTTPServer(('0.0.0.0', 10000), MyServer)
-    print("HTTP Server started on port 10000...")
-    server.serve_forever()
-
-# 2. كود جلب الأسعار اللحظية المباشر عبر الـ WebSocket
-async def get_live_prices():
-    # الرابط السريع والخفيف لـ WebSocket منصة بوكت اوبشن
-    uri = "wss://api-prod.po.market/v1/v2/websocket"
-    
-    print("جاري محاولة الاتصال بـ Pocket Option WebSocket...")
     try:
-        async with websockets.connect(uri) as websocket:
-            print("تم الاتصال بنجاح! السيرفر يستقبل البيانات اللحظية الآن...")
-            
-            # حلقة مستمرة لقراءة البيانات اللحظية فوراً
-            while True:
-                response = await websocket.recv()
-                print(f"البيانات اللحظية المستلمة: {response}")
-                await asyncio.sleep(1)
+        server = HTTPServer(('0.0.0.0', 10000), MyServer)
+        print("HTTP Server started on port 10000...")
+        server.serve_forever()
     except Exception as e:
-        print(f"حدث انقطاع أو خطأ في الاتصال: {e}")
+        print(f"Web server error: {e}")
+
+# 2. Pocket Option WebSocket Price Fetcher
+async def get_live_prices():
+    # Pocket Option backup WebSocket URIs
+    uris = [
+        "wss://api-eu.po.market/v1/v2/websocket",
+        "wss://api.po.market/v1/v2/websocket",
+        "wss://api-prod.po.market/v1/v2/websocket"
+    ]
+    
+    for uri in uris:
+        print(f"Trying to connect to: {uri}")
+        try:
+            async with websockets.connect(uri, open_timeout=10) as websocket:
+                print("✅ Successfully connected to Pocket Option Server!")
+                
+                # Continuous loop to receive live ticks and prices
+                while True:
+                    response = await websocket.recv()
+                    print(f"Data received: {response}")
+                    await asyncio.sleep(0.5)
+        except Exception as e:
+            print(f"❌ Connection failed for {uri} due to: {e}")
+            print("Switching to the next backup URI in 3 seconds...")
+            await asyncio.sleep(3)
 
 if __name__ == "__main__":
-    # تشغيل سيرفر الويب في خلفية مستقلة (Thread) حتى لا يتعطل البناء
+    # Run the HTTP server in a background thread to prevent Render from freezing
     threading.Thread(target=run_http_server, daemon=True).start()
     
-    # تشغيل حلقة جلب الأسعار اللحظية بشكل مستمر
+    # Start the continuous loop to fetch data
     asyncio.run(get_live_prices())
