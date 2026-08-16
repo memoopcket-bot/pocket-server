@@ -1,2 +1,4 @@
-websockets
-requests
+websockets==14.2
+requests==2.32.3
+ujson==5.10.0
+msgpack==1.1.0
