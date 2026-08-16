@@ -1,0 +1,2 @@
+BinaryOptionsToolsV2==0.2.1
+websockets==11.0
