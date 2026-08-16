@@ -87,7 +87,7 @@
     let oldPrices = {};
 
     async function connectServer() {
-        const payload = document.getElementById('payloadInput').value.strip;
+        const payload = document.getElementById('payloadInput').value.trim();
         if(!payload) return alert('الرجاء لصق حزمة التوثيق أولاً!');
         
         try {
@@ -116,7 +116,6 @@
         } catch(e) {}
     }
 
-    // حلقة برمجية لتحديث الجداول بشكل صامت كل ثانية بقراءة الـ API
     setInterval(async () => {
         try {
             const res = await fetch('/api/pairs');
@@ -132,7 +131,6 @@
                     const isOTC = pair.otc;
                     const displayName = pair.name.replace(" / OTC", "");
                     
-                    // تحديد ما إذا كان السعر تغير لإضافة تأثير فلاش خفيف
                     const isChanged = oldPrices[pair.asset] && oldPrices[pair.asset] !== pair.price;
                     const priceClass = isChanged ? 'price-up' : '';
                     oldPrices[pair.asset] = pair.price;
