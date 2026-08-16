@@ -1,141 +1,149 @@
 import asyncio
-import threading
+import os
 import ujson
-import urllib.parse
 import time
 import re
-from http.server import SimpleHTTPRequestHandler, HTTPServer
+from aiohttp import web
 import websockets
 
-current_payload = ""
-live_prices_cache = {}
+# Global State
+current_ssid = ""
+live_prices = {}
 websocket_task = None
-loop = None
 
-class MyServer(SimpleHTTPRequestHandler):
-    def do_GET(self):
-        global current_payload
-        parsed_url = urllib.parse.urlparse(self.path)
-        params = urllib.parse.parse_qs(parsed_url.query)
-        
-        if parsed_url.path == '/api/prices':
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            self.wfile.write(bytes(ujson.dumps(live_prices_cache), "utf-8"))
-            return
+# Supported Asset Lists (Forex & OTC Only)
+FOREX_PAIRS = ["EURUSD", "GBPUSD", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD"]
+OTC_PAIRS = ["EURUSD_otc", "GBPUSD_otc", "USDJPY_otc", "USDCHF_otc", "USDCAD_otc", "AUDUSD_otc", "NZDUSD_otc"]
+ALL_ASSETS = FOREX_PAIRS + OTC_PAIRS
 
-        if 'payload' in params:
-            raw_input = params['payload'].strip()
-            if raw_input:
-                current_payload = raw_input
-                print("🔄 Dynamic Payload Injected into Backend Pipeline.")
-                if loop and loop.is_running():
-                    asyncio.run_coroutine_threadsafe(restart_websocket(), loop)
-        
-        try:
-            with open("index.html", "r", encoding="utf-8") as file:
-                html_content = file.read()
-        except Exception:
-            html_content = "<h1>Error loading dashboard file (index.html)</h1>"
-
-        self.send_response(200)
-        self.send_header("Content-type", "text/html; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(bytes(html_content, "utf-8"))
-
-def run_http_server():
+# 1. API Endpoints Configuration
+async def handle_index(request):
     try:
-        server = HTTPServer(('0.0.0.0', 10000), MyServer)
-        print("HTTP Core Dashboard engine online on port 10000...")
-        server.serve_forever()
-    except Exception as e:
-        print(f"Server engine failure: {e}")
+        with open("index.html", "r", encoding="utf-8") as file:
+            return web.Response(text=file.read(), content_type="text/html")
+    except Exception:
+        return web.Response(text="<h1>Dashboard index.html missing</h1>", content_type="text/html", status=404)
 
-async def restart_websocket():
-    global websocket_task
+async def handle_connect(request):
+    global current_ssid, websocket_task
+    data = await request.json()
+    ssid_input = data.get("ssid", "").strip()
+    
+    if not ssid_input:
+        return web.json_response({"error": "SSID is required"}, status=400)
+    
+    current_ssid = ssid_input
+    print("🔄 Dynamic SSID payload injected into backend router.")
+    
+    # Trigger active loop connection
     if websocket_task:
         websocket_task.cancel()
-        try:
-            await websocket_task
-        except asyncio.CancelledError:
-            pass
-    websocket_task = asyncio.create_task(get_live_prices_loop())
-
-async def get_live_prices_loop():
-    global current_payload, live_prices_cache
-    uris = [
-        "wss://api-eu.po.market/v1/v2/websocket",
-        "wss://api.po.market/v1/v2/websocket",
-        "wss://api-prod.po.market/v1/v2/websocket"
-    ]
+    websocket_task = asyncio.create_task(pocket_option_websocket_loop())
     
-    extra_headers = {
+    return web.json_response({"status": "connected", "assets_count": len(ALL_ASSETS)})
+
+async def handle_disconnect(request):
+    global current_ssid, websocket_task, live_prices
+    current_ssid = ""
+    live_prices.clear()
+    if websocket_task:
+        websocket_task.cancel()
+    print("🔌 Disconnected via manual dashboard action.")
+    return web.json_response({"status": "disconnected"})
+
+async def handle_pairs(request):
+    now = time.time()
+    result = []
+    for asset, price in live_prices.items():
+        is_otc_asset = "_otc" in asset.lower()
+        result.append({
+            "asset": asset,
+            "name": asset.replace("_otc", " / OTC" if is_otc_asset else ""),
+            "price": price,
+            "otc": is_otc_asset,
+            "streaming": True,
+            "last_update": now
+        })
+    return web.json_response({"pairs": result, "timestamp": now})
+
+async def handle_status(request):
+    return web.json_response({
+        "connected": bool(current_ssid),
+        "streaming_count": len(live_prices),
+        "total_assets": len(ALL_ASSETS)
+    })
+
+# 2. Main Verified Pocket Option Connection Loop
+async def pocket_option_websocket_loop():
+    global current_ssid, live_prices
+    uri = "wss://api-eu.po.market/v1/v2/websocket"
+    headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "Origin": "https://pocketoption.com"
     }
     
-    while True:
-        if not current_payload:
-            await asyncio.sleep(2)
-            continue
-            
-        for uri in uris:
-            if not current_payload:
-                break
-            try:
-                async with websockets.connect(uri, open_timeout=15, extra_headers=extra_headers) as websocket:
-                    print(f"🎯 Successfully connected to live feed pool: {uri}")
+    while current_ssid:
+        try:
+            async with websockets.connect(uri, open_timeout=15, extra_headers=headers) as websocket:
+                print("✅ Securely handshake established with Pocket Option pipeline.")
+                
+                # Format full validation packet with proper current epoch timestamps
+                auth_packet = current_ssid
+                current_epoch = int(time.time())
+                auth_packet = re.sub(r'i:\d+;', f'i:{current_epoch};', auth_packet)
+                if not auth_packet.startswith("42"):
+                    auth_packet = f"42{auth_packet}"
+                
+                await websocket.send(auth_packet)
+                print("🔑 Authenticated session tracking packet sent.")
+                
+                # Bulk subscription request for the targeted dynamic assets
+                for asset in ALL_ASSETS:
+                    sub_msg = f'42["subscribe_candles",_wrap_asset_sub("{asset}")]'
+                    sub_msg = f'42["subscribe_candles",{{"asset":"{asset}","period":60}}]'
+                    await websocket.send(sub_msg)
+                
+                while current_ssid:
+                    response = await websocket.recv()
                     
-                    auth_string = current_payload
+                    # Core engine connection maintainer
+                    if response == "2":
+                        await websocket.send("3")
+                        continue
                     
-                    # Core fix: Dynamically update the session timestamp to current epoch time
-                    current_epoch = int(time.time())
-                    auth_string = re.sub(r'i:\d+;', f'i:{current_epoch};', auth_string)
-                    
-                    if auth_string.startswith("42"):
-                        auth_string = auth_string[2:]
-                    
-                    # Transmit fresh timestamped packet
-                    await websocket.send(f"42{auth_string}")
-                    print("🔒 Session synchronization payload broadcasted with fresh timestamp.")
-                    
-                    # Requesting active ticks stream for OTC pair
-                    subscribe_msg = '42["subscribe_candles",{"asset":"EURUSD_otc","period":60}]'
-                    await websocket.send(subscribe_msg)
-                    
-                    while current_payload:
-                        response = await websocket.recv()
-                        
-                        # Handle Keep-Alive Engine (Ping/Pong)
-                        if response == "2":
-                            await websocket.send("3")
-                            print("🏓 Ping-Pong Keep-Alive Executed.")
-                            continue
-                            
-                        if response.startswith("42"):
-                            try:
-                                raw_json = response[2:]
-                                parsed_data = ujson.loads(raw_json)
-                                # Capture incoming market values
-                                if isinstance(parsed_data, list) and len(parsed_data) > 0:
-                                    live_prices_cache["EURUSD"] = parsed_data
-                                    print(f"📈 Match incoming tick stream: {parsed_data}")
-                            except Exception:
-                                pass
-                        await asyncio.sleep(0.01)
-            except asyncio.CancelledError:
-                return
-            except Exception as e:
-                print(f"⚠️ Feed connection failed: {e}")
-                await asyncio.sleep(3)
+                    if response.startswith("42"):
+                        try:
+                            parsed = ujson.loads(response[2:])
+                            if isinstance(parsed, list) and len(parsed) > 1:
+                                msg_type = parsed[0]
+                                msg_data = parsed[1]
+                                # Capture realtime closing prices array buffer
+                                if msg_type == "candles" or msg_type == "tick":
+                                    asset_id = msg_data.get("asset")
+                                    if asset_id in ALL_ASSETS:
+                                        live_prices[asset_id] = msg_data.get("close") or msg_data.get("price", 0.0)
+                        except Exception:
+                            pass
+                    await asyncio.sleep(0.01)
+        except asyncio.CancelledError:
+            return
+        except Exception as e:
+            print(f"⚠️ Pipeline connection dropped, retrying: {e}")
+            await asyncio.sleep(3)
 
-def start_async_loop():
-    global loop
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(get_live_prices_loop())
+# 3. Server Factory Initializer
+def create_app():
+    app = web.Application()
+    app.router.add_get("/", handle_index)
+    app.router.add_post("/api/connect", handle_connect)
+    app.router.add_post("/api/disconnect", handle_disconnect)
+    app.router.add_get("/api/pairs", handle_pairs)
+    app.router.add_get("/api/status", handle_status)
+    return app
 
 if __name__ == "__main__":
-    threading.Thread(target=run_http_server, daemon=True).start()
-    start_async_loop()
+    # Standard Render enforcement port bound mapping setup
+    port = int(os.environ.get("PORT", 10000))
+    app = create_app()
+    print(f"Starting standard microserver engine on port {port}")
+    web.run_app(app, host="0.0.0.0", port=port)
