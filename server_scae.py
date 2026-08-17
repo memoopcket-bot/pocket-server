@@ -1,169 +1,145 @@
 import asyncio
+import json
+import logging
 import os
-import ujson
 import time
-import re
+from pathlib import Path
 from aiohttp import web
-import websockets
+from concurrent.futures import ThreadPoolExecutor
 
-# Global State
-current_ssid = ""
-live_prices = {}
-websocket_task = None
+# إعداد السجلات لمراقبة Render Logs
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s: %(message)s",
+)
+logger = logging.getLogger("pocket-server")
 
-# Supported Asset Lists (Forex & OTC Only)
-FOREX_PAIRS = ["EURUSD", "GBPUSD", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD"]
-OTC_PAIRS = ["EURUSD_otc", "GBPUSD_otc", "USDJPY_otc", "USDCHF_otc", "USDCAD_otc", "AUDUSD_otc", "NZDUSD_otc"]
-ALL_ASSETS = FOREX_PAIRS + OTC_PAIRS
+PORT = int(os.getenv("PORT", "10000"))
+BASE_DIR = Path(__file__).resolve().parent
+INDEX_FILE = BASE_DIR / "index.html"
 
-# 1. API Endpoints Configuration
-async def handle_index(request):
-    try:
-        with open("index.html", "r", encoding="utf-8") as file:
-            return web.Response(text=file.read(), content_type="text/html")
-    except Exception:
-        return web.Response(text="<h1>Dashboard index.html missing</h1>", content_type="text/html", status=404)
+# مخزن البيانات والحالة
+prices = {}
+state = {
+    "connected": False,
+    "last_error": None,
+    "last_update": None,
+    "started_at": int(time.time()),
+}
 
-async def handle_connect(request):
-    global current_ssid, websocket_task
-    data = await request.json()
-    ssid_input = data.get("ssid", "").strip()
-    
-    if not ssid_input:
-        return web.json_response({"error": "SSID is required"}, status=400)
-    
-    # Clean escaped quotes coming from specific client devices
-    ssid_input = ssid_input.replace('\\"', '"').replace('\\\\', '\\')
-    current_ssid = ssid_input
-    print("🔄 Dynamic SSID payload injected into backend router.")
-    
-    if websocket_task:
-        websocket_task.cancel()
-    websocket_task = asyncio.create_task(pocket_option_websocket_loop())
-    
-    return web.json_response({"status": "connected", "assets_count": len(ALL_ASSETS)})
+api_instance = None
+executor = ThreadPoolExecutor(max_workers=2)
 
-async def handle_disconnect(request):
-    global current_ssid, websocket_task, live_prices
-    current_ssid = ""
-    live_prices.clear()
-    if websocket_task:
-        websocket_task.cancel()
-    print("🔌 Disconnected via manual dashboard action.")
-    return web.json_response({"status": "disconnected"})
+def json_response(data, status=200):
+    return web.json_response(
+        data,
+        status=status,
+        dumps=lambda v: json.dumps(v, ensure_ascii=False, default=str),
+    )
 
-async def handle_pairs(request):
-    now = time.time()
-    result = []
-    for asset, price in live_prices.items():
-        is_otc_asset = "_otc" in asset.lower()
-        result.append({
-            "asset": asset,
-            "name": asset.replace("_otc", " / OTC" if is_otc_asset else ""),
-            "price": price,
-            "otc": is_otc_asset,
-            "streaming": True,
-            "last_update": now
-        })
-    return web.json_response({"pairs": result, "timestamp": now})
+async def home(request):
+    if not INDEX_FILE.exists():
+        return web.Response(text="ملف index.html غير موجود في السيرفر", status=500)
+    return web.FileResponse(INDEX_FILE)
 
-async def handle_status(request):
-    return web.json_response({
-        "connected": bool(current_ssid),
-        "streaming_count": len(live_prices),
-        "total_assets": len(ALL_ASSETS)
+async def health(request):
+    return json_response({
+        "ok": True,
+        "server_uptime_seconds": int(time.time()) - state["started_at"],
+        "pocket_connected": state["connected"],
+        "last_error": state["last_error"],
+        "last_update": state["last_update"],
+        "tracked_pairs_count": len(prices)
     })
 
-# 2. Advanced Bypassing Pocket Option Connection Loop
-async def pocket_option_websocket_loop():
-    global current_ssid, live_prices
-    uri = "wss://api-eu.po.market/v1/v2/websocket"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Origin": "https://pocketoption.com"
-    }
-    
-    while current_ssid:
-        try:
-            async with websockets.connect(uri, open_timeout=15, extra_headers=headers) as websocket:
-                print("✅ Securely handshake established with Pocket Option pipeline.")
-                
-                auth_packet = current_ssid
-                current_epoch = int(time.time())
-                auth_packet = re.sub(r'i:\d+;', f'i:{current_epoch};', auth_packet)
-                if not auth_packet.startswith("42"):
-                    auth_packet = f"42{auth_packet}"
-                
-                await websocket.send(auth_packet)
-                print("🔑 Authenticated session tracking packet sent.")
-                await asyncio.sleep(1)
-                
-                # Active subscription to stream channels
-                for asset in ALL_ASSETS:
-                    sub_msg = f'42["subscribe_candles",_wrap_asset_sub("{asset}")]'
-                    sub_msg = f'42["subscribe_candles",{{"asset":"{asset}","period":60}}]'
-                    await websocket.send(sub_msg)
-                    
-                    tick_msg = f'42["load_candles",_wrap_asset_sub("{asset}")]'
-                    tick_msg = f'42["load_candles",{{"asset":"{asset}","period":60}}]'
-                    await websocket.send(tick_msg)
-                
-                while current_ssid:
-                    response = await websocket.recv()
-                    
-                    if response == "2":
-                        await websocket.send("3")
-                        continue
-                    
-                    if response.startswith("42"):
-                        try:
-                            raw_json = response[2:]
-                            parsed = ujson.loads(raw_json)
-                            
-                            if isinstance(parsed, list) and len(parsed) > 1:
-                                msg_type = parsed[0]
-                                msg_data = parsed[1]
-                                
-                                # High-speed extension-aligned dictionary and list matching sequence
-                                if msg_type in ["tick", "candles", "candle"]:
-                                    if isinstance(msg_data, dict):
-                                        asset_id = msg_data.get("asset")
-                                        if asset_id in ALL_ASSETS:
-                                            # Grab native floating price point values matching extension logic
-                                            raw_price = msg_data.get("price") or msg_data.get("close")
-                                            if raw_price is not None:
-                                                live_prices[asset_id] = float(raw_price)
-                                                
-                                    elif isinstance(msg_data, list):
-                                        # Extension Core Fix: Safely loops multi-asset array buffers arriving from pool
-                                        for item in msg_data:
-                                            if isinstance(item, dict):
-                                                asset_id = item.get("asset")
-                                                if asset_id in ALL_ASSETS:
-                                                    raw_price = item.get("price") or item.get("close")
-                                                    if raw_price is not None:
-                                                        live_prices[asset_id] = float(raw_price)
-                        except Exception:
-                            pass
-                    await asyncio.sleep(0.01)
-        except asyncio.CancelledError:
-            return
-        except Exception as e:
-            print(f"⚠️ Pipeline connection dropped, retrying: {e}")
-            await asyncio.sleep(3)
+async def get_pairs(request):
+    # مسار الواجهة لقراءة الأسعار اللحظية بشكل صامت كل ثانية
+    return json_response({
+        "ok": True,
+        "connected": state["connected"],
+        "prices": prices,
+        "updated_at": state["last_update"]
+    })
 
-# 3. Server Factory Initializer
-def create_app():
-    app = web.Application()
-    app.router.add_get("/", handle_index)
-    app.router.add_post("/api/connect", handle_connect)
-    app.router.add_post("/api/disconnect", handle_disconnect)
-    app.router.add_get("/api/pairs", handle_pairs)
-    app.router.add_get("/api/status", handle_status)
-    return app
+def start_api_sync(auth_token):
+    """تشغيل ربط المكتبة التزامني في Thread منفصل لمنع تجميد السيرفر"""
+    global api_instance
+    try:
+        from pocketoptionapi.stable_api import PocketOptionAPI
+        # بناء الكائن باستخدام الـ SSID الممرر من الواجهة
+        api_instance = PocketOptionAPI(auth_token)
+        return api_instance.connect()
+    except Exception as e:
+        logger.error(f"خطأ أثناء تشغيل المكتبة التزامنية: {e}")
+        return False
+
+async def connect_provider(request):
+    global api_instance
+    try:
+        body = await request.json()
+    except Exception:
+        return json_response({"ok": False, "error": "JSON حزمة غير صالحة"}, status=400)
+    
+    auth = body.get("auth") or body.get("ssid")
+    if not auth or not isinstance(auth, str) or len(auth.strip()) < 10:
+        return json_response({"ok": False, "error": "رمز التوثيق (SSID) غير صالح أو مفقود"}, status=400)
+    
+    auth_token = auth.strip()
+    setStatus("جارٍ محاولة الاتصال بالخوادم البعيدة...")
+    
+    # تشغيل الاتصال عبر الـ Thread Pool
+    loop = asyncio.get_running_loop()
+    connection_success = await loop.run_in_executor(executor, start_api_sync, auth_token)
+    
+    if connection_success:
+        state["connected"] = True
+        state["last_error"] = None
+        state["last_update"] = int(time.time())
+        logger.info("تم التوثيق والاتصال بنجاح بـ Pocket Option")
+        
+        # بدء حلقة قراءة الأسعار في الخلفية بشكل منفصل
+        asyncio.create_task(track_prices_loop())
+        return json_response({"ok": True, "message": "تم الاتصال وبث الأسعار بدأ بنجاح"})
+    else:
+        state["connected"] = False
+        state["last_error"] = "فشل التوثيق: خوادم المنصة رفضت الـ SSID"
+        return json_response({"ok": False, "error": state["last_error"]}, status=400)
+
+async def track_prices_loop():
+    """حلقة مستمرة لقراءة الأسعار من كائن الـ API وتحديث الـ State داخلياً"""
+    global api_instance
+    while state["connected"] and api_instance:
+        try:
+            # محاولة جلب الشموع اللحظية بناءً على توثيق المستودع المرسل
+            if hasattr(api_instance, "get_realtime_candles"):
+                for asset in ["EURUSD", "GBPUSD", "EURUSD_OTC", "GBPUSD_OTC"]:
+                    candles = api_instance.get_realtime_candles(asset)
+                    if candles:
+                        # أخذ آخر سعر محدث (الاطار اللحظي)
+                        prices[asset] = list(candles.values())[-1] if isinstance(candles, dict) else candles[-1]
+                        state["last_update"] = int(time.time())
+            await asyncio.sleep(0.5) # تحديث فائق السرعة كل نصف ثانية
+        except Exception as e:
+            logger.warning(f"تحذير أثناء قراءة الأسعار: {e}")
+            await asyncio.sleep(1)
+
+async def disconnect_provider(request):
+    global api_instance
+    state["connected"] = False
+    if api_instance:
+        try:
+            api_instance.close()
+        except Exception:
+            pass
+        api_instance = None
+    return json_response({"ok": True, "message": "تم قطع الاتصال بالخادم بنجاح"})
+
+app = web.Application()
+app.router.add_get("/", home)
+app.router.add_get("/health", health)
+app.router.add_get("/api/pairs", get_pairs)
+app.router.add_post("/api/connect", connect_provider)
+app.router.add_post("/api/disconnect", disconnect_provider)
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app = create_app()
-    print(f"Starting standard microserver engine on port {port}")
-    web.run_app(app, host="0.0.0.0", port=port)
+    web.run_app(app, host="0.0.0.0", port=PORT)
