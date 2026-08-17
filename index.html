@@ -1,122 +1,238 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pocket Option Live Dashboard</title>
-    <style>
-        :root { --bg: #0b0e14; --card: #151a22; --text: #e2e8f0; --green: #00e676; --red: #ff3d00; --border: #232d38; }
-        body { font-family: sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; }
-        .container { max-width: 1200px; margin: 0 auto; }
-        header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid var(--border); padding-bottom: 10px; }
-        header h1 { color: var(--green); margin: 0 0 5px 0; font-size: 1.5rem; }
-        .status-bar { display: inline-block; padding: 5px 12px; border-radius: 20px; background: #1a233a; font-weight: bold; font-size: 0.85rem; }
-        .status-online { color: var(--green); }
-        .status-offline { color: var(--red); }
-        .auth-section { background: var(--card); border: 1px solid var(--border); padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-        .form-group { display: flex; flex-direction: column; gap: 8px; }
-        label { font-weight: bold; color: #a0aec0; font-size: 0.9rem; }
-        textarea { background: #0b0e14; border: 1px solid var(--border); color: #fff; padding: 10px; border-radius: 6px; resize: vertical; font-family: monospace; }
-        .btn-group { display: flex; gap: 10px; margin-top: 10px; }
-        button { flex: 1; padding: 10px; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; }
-        .btn-connect { background: var(--green); color: #000; }
-        .btn-disconnect { background: var(--red); color: #fff; }
-        .tables-container { display: grid; grid-template-columns: 1fr; gap: 15px; }
-        @media (min-width: 768px) { .tables-container { grid-template-columns: 1fr 1fr; } }
-        .table-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 15px; }
-        .table-card h2 { margin: 0 0 10px 0; border-bottom: 1px solid var(--border); padding-bottom: 8px; font-size: 1.1rem; }
-        .forex-title { color: #38bdf8; }
-        .otc-title { color: #f59e0b; }
-        table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem; }
-        th, td { padding: 10px 8px; border-bottom: 1px solid var(--border); }
-        th { color: #a0aec0; }
-        .price-up { color: var(--green); font-weight: bold; }
-        .price-down { color: var(--red); font-weight: bold; }
-        .waiting { color: #718096; font-style: italic; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pocket Option - لوحة التحكم</title>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#131722; --border:#232838;
+    --text:#e6e9f0; --muted:#8a92a6; --green:#26a69a; --red:#ef5350;
+    --accent:#4f7cff;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:'Segoe UI', Tahoma, sans-serif;
+    background:var(--bg); color:var(--text); padding:20px;
+  }
+  .wrap{max-width:900px; margin:0 auto}
+  h1{font-size:20px; margin-bottom:4px}
+  .sub{color:var(--muted); font-size:13px; margin-bottom:20px}
+  .card{
+    background:var(--panel); border:1px solid var(--border);
+    border-radius:10px; padding:16px; margin-bottom:16px;
+  }
+  label{display:block; font-size:13px; color:var(--muted); margin-bottom:6px}
+  input, select{
+    width:100%; padding:10px; border-radius:8px; border:1px solid var(--border);
+    background:#0e131f; color:var(--text); font-size:14px; margin-bottom:12px;
+  }
+  .row{display:flex; gap:10px}
+  .row > div{flex:1}
+  button{
+    background:var(--accent); color:#fff; border:none; padding:10px 18px;
+    border-radius:8px; cursor:pointer; font-size:14px; font-weight:600;
+  }
+  button:hover{opacity:.9}
+  button:disabled{opacity:.4; cursor:not-allowed}
+  button.secondary{background:#232838}
+  .status{display:flex; align-items:center; gap:8px; font-size:14px; margin-bottom:10px}
+  .dot{width:9px; height:9px; border-radius:50%; background:var(--red)}
+  .dot.on{background:var(--green)}
+  .stats{display:flex; gap:16px; flex-wrap:wrap}
+  .stat{background:#0e131f; border:1px solid var(--border); border-radius:8px; padding:10px 16px; min-width:120px}
+  .stat .v{font-size:18px; font-weight:700}
+  .stat .l{font-size:12px; color:var(--muted)}
+  table{width:100%; border-collapse:collapse; font-size:13px}
+  th,td{padding:6px 8px; text-align:center; border-bottom:1px solid var(--border)}
+  th{color:var(--muted); font-weight:600}
+  .up{color:var(--green)} .down{color:var(--red)}
+  .log{
+    background:#0e131f; border:1px solid var(--border); border-radius:8px;
+    padding:10px; font-size:12px; color:var(--muted); max-height:150px; overflow-y:auto;
+    white-space:pre-wrap; font-family:monospace;
+  }
+</style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Pocket Option Live Dashboard</h1>
-            <div class="status-bar">Status: <span id="server-status" class="status-offline">Connecting...</span></div>
-        </header>
-        <div class="auth-section">
-            <div class="form-group">
-                <label for="auth-token">Enter Pocket Option SSID (32 Chars):</label>
-                <textarea id="auth-token" rows="2" placeholder="Paste your SSID token here..."></textarea>
-            </div>
-            <div class="btn-group">
-                <button class="btn-connect" onclick="connectPO()">Connect Platform</button>
-                <button class="btn-disconnect" onclick="disconnectPO()">Disconnect</button>
-            </div>
-        </div>
-        <div class="tables-container">
-            <div class="table-card">
-                <h2 class="forex-title">🌐 Global Forex</h2>
-                <table>
-                    <thead><tr><th>Asset</th><th>Live Price</th></tr></thead>
-                    <tbody id="forex-tbody">
-                        <tr id="row-EURUSD"><td style="font-weight:bold;">EUR/USD</td><td id="price-EURUSD" class="waiting">Waiting...</td></tr>
-                        <tr id="row-GBPUSD"><td style="font-weight:bold;">GBP/USD</td><td id="price-GBPUSD" class="waiting">Waiting...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-            <div class="table-card">
-                <h2 class="otc-title">📊 OTC Markets</h2>
-                <table>
-                    <thead><tr><th>Asset</th><th>Live Price</th></tr></thead>
-                    <tbody id="otc-tbody">
-                        <tr id="row-EURUSD_otc"><td style="font-weight:bold;">EUR/USD (OTC)</td><td id="price-EURUSD_otc" class="waiting">Waiting...</td></tr>
-                        <tr id="row-GBPUSD_otc"><td style="font-weight:bold;">GBP/USD (OTC)</td><td id="price-GBPUSD_otc" class="waiting">Waiting...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
+<div class="wrap">
+  <h1>لوحة تحكم Pocket Option</h1>
+  <div class="sub">تتصل بسيرفر البيانات (server_scae.py) عبر WebSocket</div>
+
+  <!-- الاتصال بالسيرفر -->
+  <div class="card">
+    <label>رابط السيرفر (WebSocket)</label>
+    <input id="serverUrl" placeholder="wss://your-app.onrender.com" value="ws://localhost:8765">
+    <label>SSID (جلسة Pocket Option)</label>
+    <input id="ssid" placeholder="الصق قيمة الجلسة هنا">
+    <div class="row">
+      <div><button id="btnConnect" onclick="connect()">اتصال</button></div>
+      <div><button class="secondary" id="btnDisconnect" onclick="disconnect()" disabled>قطع الاتصال</button></div>
     </div>
-    <script>
-        let ws; const oldPrices = {}; const pairsToScan = ['EURUSD', 'GBPUSD', 'EURUSD_otc', 'GBPUSD_otc'];
-        function initWebSocket() {
-            const loc = window.location; const wsUri = (loc.protocol === "https:" ? "wss://" : "ws://") + loc.host + "/ws";
-            ws = new WebSocket(wsUri);
-            ws.onopen = () => {
-                document.getElementById('server-status').innerText = "Gateway Connected. Enter SSID.";
-                document.getElementById('server-status').className = "status-online"; startSyncLoop();
-            };
-            ws.onclose = () => {
-                document.getElementById('server-status').innerText = "Gateway Disconnected. Retrying...";
-                document.getElementById('server-status').className = "status-offline"; setTimeout(initWebSocket, 2000);
-            };
-            ws.onmessage = (event) => {
-                try {
-                    const res = JSON.parse(event.data);
-                    if (res.action === "connect") { if (res.success) alert(res.message); else alert("Auth Failed: " + res.error); }
-                    if (res.action === "scan" && res.results) { updateDashboardPrices(res.results); }
-                } catch (e) { console.error(e); }
-            };
-        }
-        function connectPO() {
-            const ssid = document.getElementById('auth-token').value.trim(); if(!ssid) return alert("Please enter SSID first");
-            if(ws && ws.readyState === WebSocket.OPEN) { ws.send(JSON.stringify({ action: "connect", ssid: ssid })); }
-        }
-        function disconnectPO() {
-            if(ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ action: "disconnect" })); alert("Disconnected from platform.");
-                pairsToScan.forEach(k => { const el = document.getElementById(`price-${k}`); if(el) { el.innerText = "Waiting..."; el.className = "waiting"; } });
-            }
-        }
-        function updateDashboardPrices(results) {
-            for (const [pair, info] of Object.entries(results)) {
-                const el = document.getElementById(`price-${pair}`);
-                if (el && info.success) {
-                    const price = info.last_price; el.innerText = price;
-                    if (oldPrices[pair]) { el.className = price > oldPrices[pair] ? 'price-up' : (price < oldPrices[pair] ? 'price-down' : el.className); }
-                    oldPrices[pair] = price;
-                }
-            }
-        }
-        function startSyncLoop() { setInterval(() => { if (ws && ws.readyState === WebSocket.OPEN) { ws.send(JSON.stringify({ action: "scan", pairs: pairsToScan, tf: 1, limit: 10 })); } }, 1000); }
-        window.onload = initWebSocket;
-    </script>
+  </div>
+
+  <!-- الحالة -->
+  <div class="card">
+    <div class="status"><span class="dot" id="dot"></span><span id="statusText">غير متصل</span></div>
+    <div class="stats">
+      <div class="stat"><div class="v" id="balance">--</div><div class="l">الرصيد</div></div>
+      <div class="stat"><div class="v" id="serverName">--</div><div class="l">السيرفر</div></div>
+      <div class="stat"><div class="v" id="clock">--</div><div class="l">الوقت</div></div>
+    </div>
+  </div>
+
+  <!-- طلب شموع -->
+  <div class="card">
+    <div class="row">
+      <div>
+        <label>الزوج</label>
+        <select id="pair">
+          <option>EURUSD</option><option>EURUSD_otc</option>
+          <option>USDJPY</option><option>USDJPY_otc</option>
+          <option>AUDUSD</option><option>AUDUSD_otc</option>
+          <option>GBPUSD_otc</option>
+        </select>
+      </div>
+      <div>
+        <label>الفريم (دقائق)</label>
+        <input id="tf" type="number" value="1" min="1">
+      </div>
+      <div>
+        <label>عدد الشموع</label>
+        <input id="limit" type="number" value="50" min="1" max="500">
+      </div>
+    </div>
+    <button onclick="getCandles()">جلب الشموع</button>
+  </div>
+
+  <!-- الجدول -->
+  <div class="card">
+    <table id="candlesTable">
+      <thead><tr><th>الوقت</th><th>فتح</th><th>أعلى</th><th>أدنى</th><th>إغلاق</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<script>
+let ws = null;
+let reqId = 0;
+const pending = {};
+
+function log(msg){
+  const el = document.getElementById('log');
+  const t = new Date().toLocaleTimeString();
+  el.textContent += `[${t}] ${msg}\n`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function setStatus(connected, text){
+  document.getElementById('dot').className = 'dot' + (connected ? ' on' : '');
+  document.getElementById('statusText').textContent = text;
+  document.getElementById('btnConnect').disabled = connected;
+  document.getElementById('btnDisconnect').disabled = !connected;
+}
+
+function connect(){
+  const url = document.getElementById('serverUrl').value.trim();
+  const ssid = document.getElementById('ssid').value.trim();
+  if(!url){ alert('أدخل رابط السيرفر'); return; }
+  if(!ssid){ alert('أدخل SSID'); return; }
+
+  try{
+    ws = new WebSocket(url);
+  }catch(e){
+    log('خطأ في الرابط: ' + e.message);
+    return;
+  }
+
+  ws.onopen = () => {
+    log('تم فتح الاتصال بالسيرفر، جاري تسجيل الدخول...');
+    ws.send(JSON.stringify({ action: 'connect', ssid: ssid }));
+  };
+
+  ws.onmessage = (ev) => {
+    let data;
+    try{ data = JSON.parse(ev.data); }catch(e){ return; }
+    handleMessage(data);
+  };
+
+  ws.onerror = () => log('حدث خطأ في اتصال WebSocket');
+  ws.onclose = () => {
+    setStatus(false, 'غير متصل');
+    log('تم إغلاق الاتصال');
+  };
+}
+
+function disconnect(){
+  if(ws){
+    ws.send(JSON.stringify({ action: 'disconnect' }));
+    ws.close();
+    ws = null;
+  }
+  setStatus(false, 'غير متصل');
+}
+
+function handleMessage(data){
+  if(data.action === 'connect'){
+    if(data.success){
+      setStatus(true, 'متصل');
+      document.getElementById('balance').textContent = '$' + Number(data.balance).toFixed(2);
+      document.getElementById('serverName').textContent = data.server || '--';
+      log('نجح الاتصال: ' + data.message);
+    } else {
+      setStatus(false, 'فشل الاتصال');
+      log('فشل: ' + (data.error || data.message));
+    }
+  }
+  else if(data.action === 'status'){
+    document.getElementById('balance').textContent = '$' + Number(data.balance).toFixed(2);
+    document.getElementById('clock').textContent = data.time;
+  }
+  else if(data.action === 'candles'){
+    if(data.success){
+      renderCandles(data.data);
+      log(`تم جلب ${data.count} شمعة لـ ${data.pair}`);
+    } else {
+      log('خطأ في جلب الشموع: ' + data.error);
+    }
+  }
+  else if(data.success === false){
+    log('خطأ: ' + data.error);
+  }
+}
+
+function getCandles(){
+  if(!ws || ws.readyState !== 1){ alert('اتصل بالسيرفر أولاً'); return; }
+  const pair = document.getElementById('pair').value;
+  const tf = document.getElementById('tf').value;
+  const limit = document.getElementById('limit').value;
+  ws.send(JSON.stringify({ action: 'candles', pair, tf: Number(tf), limit: Number(limit), id: ++reqId }));
+  log(`طلب شموع: ${pair} - فريم ${tf}د - ${limit} شمعة`);
+}
+
+function renderCandles(rows){
+  const tbody = document.querySelector('#candlesTable tbody');
+  tbody.innerHTML = '';
+  rows.slice().reverse().forEach(c => {
+    const time = new Date(c.t * 1000).toLocaleTimeString();
+    const cls = c.c >= c.o ? 'up' : 'down';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${time}</td><td>${c.o.toFixed(5)}</td><td>${c.h.toFixed(5)}</td><td>${c.l.toFixed(5)}</td><td class="${cls}">${c.c.toFixed(5)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// تحديث دوري للحالة كل 10 ثوان
+setInterval(() => {
+  if(ws && ws.readyState === 1){
+    ws.send(JSON.stringify({ action: 'status' }));
+  }
+}, 10000);
+</script>
 </body>
 </html>
