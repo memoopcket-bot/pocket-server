@@ -78,7 +78,7 @@
         const oldPrices = {};
         function updateStatus(text, className) {
             const el = document.getElementById('server-status');
-            el.innerText = text; el.className = className;
+            if (el) { el.innerText = text; el.className = className; }
         }
         async function connectServer() {
             const token = document.getElementById('auth-token').value.trim();
