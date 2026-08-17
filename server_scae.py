@@ -1,305 +1,112 @@
-import json
 import asyncio
-import traceback
-import time
-import os
+import json
 import logging
-import re
-from datetime import datetime
+import os
+import time
 from pathlib import Path
-from aiohttp import web, WSMsgType
+from aiohttp import web
+from concurrent.futures import ThreadPoolExecutor
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
 logger = logging.getLogger("pocket-server")
 
+PORT = int(os.getenv("PORT", "10000"))
 BASE_DIR = Path(__file__).resolve().parent
 INDEX_FILE = BASE_DIR / "index.html"
-PORT = int(os.environ.get("PORT", 10000))
 
-PO_SERVERS = [
-    "wss://api-eu.po.market/socket.io/?EIO=4&transport=websocket",
-    "wss://api-l.po.market/socket.io/?EIO=4&transport=websocket",
-    "wss://api-spb.po.market/socket.io/?EIO=4&transport=websocket",
-]
-
-ALL_PAIRS = {
-    "EURUSD": "EURUSD", "USDJPY": "USDJPY", "AUDUSD": "AUDUSD",
-    "USDCAD": "USDCAD", "USDCHF": "USDCHF", "EURJPY": "EURJPY",
-    "AUDJPY": "AUDJPY", "EURCHF": "EURCHF", "AUDCAD": "AUDCAD",
-    "CADCHF": "CADCHF", "CADJPY": "CADJPY", "AUDCHF": "AUDCHF",
-    "CHFJPY": "CHFJPY", "EURCAD": "EURCAD", "EURAUD": "EURAUD",
-    "EURUSD_otc": "EURUSD_otc", "USDJPY_otc": "USDJPY_otc",
-    "AUDUSD_otc": "AUDUSD_otc", "USDCAD_otc": "USDCAD_otc",
-    "USDCHF_otc": "USDCHF_otc", "EURJPY_otc": "EURJPY_otc",
-    "AUDJPY_otc": "AUDJPY_otc", "AUDCAD_otc": "AUDCAD_otc",
-    "CADCHF_otc": "CADCHF_otc", "CADJPY_otc": "CADJPY_otc",
-    "AUDCHF_otc": "AUDCHF_otc", "CHFJPY_otc": "CHFJPY_otc",
-    "EURCHF_otc": "EURCHF_otc", "EURCAD_otc": "EURCAD_otc",
-    "EURAUD_otc": "EURAUD_otc",
+prices = {}
+state = {
+    "connected": False,
+    "last_error": None,
+    "last_update": None,
+    "started_at": int(time.time()),
 }
 
-class POClient:
-    def __init__(self):
-        self.ws = None
-        self.connected = False
-        self.balance = 0.0
-        self.ssid = ""
-        self.server = ""
-        self._candles = {}
-        self._pending = {}
-        self._lock = asyncio.Lock()
+api_instance = None
+executor = ThreadPoolExecutor(max_workers=2)
 
-    async def connect(self, raw_input):
-        import aiohttp
-        clean_input = raw_input.strip()
-        
-        # محرك البحث الجنائي المستحدث لصيد الـ 32 حرفاً الصافية بدقة مطلقة
-        match = re.search(r'([a-f0-9]{32})', clean_input, re.IGNORECASE)
-        if match:
-            self.ssid = match.group(1)
-        else:
-            self.ssid = clean_input
+def json_response(data, status=200):
+    return web.json_response(data, status=status, dumps=lambda v: json.dumps(v, ensure_ascii=False, default=str))
 
-        if len(self.ssid) != 32:
-            return False, f"Invalid Extracted SSID Length: {len(self.ssid)} chars. Must be exactly 32."
-
-        if self.ws:
-            try: await self.ws.close()
-            except: pass
-
-        for url in PO_SERVERS:
-            host = url.split("//")[1].split("/")[0]
-            try:
-                logger.info(f"Connecting to {host}...")
-                headers = {
-                    "Origin": "https://po.trade",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                }
-                session = aiohttp.ClientSession()
-                ws = await session.ws_connect(url, headers=headers, timeout=10)
-                
-                await ws.receive_str()
-                await ws.send_str("40")
-                await asyncio.sleep(0.5)
-                
-                auth = {
-                    "session": self.ssid, "isDemo": 0, "uid": 0,
-                    "platform": 2, "isFastHistory": True, "isOptimized": True
-                }
-                await ws.send_str(f'42["auth",{json.dumps(auth)}]')
-
-                ok = False
-                for _ in range(20):
-                    try:
-                        msg = await ws.receive(timeout=2)
-                        if msg.type == WSMsgType.TEXT:
-                            data_str = msg.data
-                            if data_str == "2": 
-                                await ws.send_str("3")
-                                continue
-                            r = self._parse(data_str)
-                            if r:
-                                ev, d = r
-                                if ev in ("successauth", "updateBalance", "balanceUpdated"):
-                                    if isinstance(d, dict):
-                                        b = d.get("balance", d.get("amount", 0))
-                                        if b: self.balance = float(b)
-                                    ok = True; break
-                    except asyncio.TimeoutError:
-                        continue
-
-                if ok or self.balance > 0:
-                    self.ws = ws
-                    self.connected = True
-                    self.server = host
-                    logger.info(f"Connected successfully! Balance: ${self.balance:.2f}")
-                    asyncio.create_task(self._recv_loop())
-                    asyncio.create_task(self._ping_loop())
-                    return True, f"Connected! Balance: ${self.balance:.2f}"
-
-                await ws.close()
-                await session.close()
-            except Exception as e:
-                logger.error(f"Connection error: {e}")
-
-        return False, "Platform authentication rejected. Check if token expired."
-
-    def _parse(self, msg):
-        try:
-            for p in ("42", "451-"):
-                if msg.startswith(p):
-                    d = json.loads(msg[len(p):])
-                    if isinstance(d, list) and len(d) >= 2:
-                        return d[0], d[1]
-        except: pass
-        return None
-
-    async def _ping_loop(self):
-        while self.connected and self.ws:
-            try:
-                await asyncio.sleep(20)
-                await self.ws.send_str("2")
-            except: break
-    async def _recv_loop(self):
-        while self.connected and self.ws:
-            try:
-                msg = await self.ws.receive(timeout=40)
-                if msg.type == WSMsgType.TEXT:
-                    raw_data = msg.data
-                    if raw_data == "2": 
-                        await self.ws.send_str("3")
-                        continue
-                    if raw_data in ("3", "40", "41"): continue
-
-                    r = self._parse(raw_data)
-                    if not r: continue
-                    ev, d = r
-
-                    if ev in ("updateBalance", "successauth", "balanceUpdated"):
-                        if isinstance(d, dict):
-                            b = d.get("balance", d.get("amount", 0))
-                            if b: self.balance = float(b)
-
-                    if ev in ("candles", "loadHistoryPeriod", "history"):
-                        sym = ""
-                        cndls = []
-                        if isinstance(d, dict):
-                            sym = d.get("asset", d.get("symbol", d.get("pair", "")))
-                            cndls = d.get("candles", d.get("data", d.get("history", [])))
-                        if sym and cndls:
-                            async with self._lock:
-                                self._candles[sym] = cndls
-                            k = f"c_{sym}"
-                            if k in self._pending:
-                                self._pending[k].set()
-            except asyncio.TimeoutError:
-                try: await self.ws.send_str("2")
-                except: break
-            except:
-                self.connected = False; break
-
-    async def get_candles(self, pair, tf_sec=60, limit=200):
-        if not self.connected or not self.ws:
-            return None, "not connected"
-        try:
-            sym = pair
-            req = {"asset": sym, "period": tf_sec, "time": int(time.time()), "count": limit}
-            async with self._lock:
-                self._candles.pop(sym, None)
-            ev = asyncio.Event()
-            k = f"c_{sym}"
-            self._pending[k] = ev
-            await self.ws.send_str(f'42["loadHistoryPeriod",{json.dumps(req)}]')
-            try:
-                await asyncio.wait_for(ev.wait(), timeout=12)
-            except asyncio.TimeoutError:
-                self._pending.pop(k, None)
-                return None, f"timeout ({pair})"
-            self._pending.pop(k, None)
-            async with self._lock:
-                raw = self._candles.get(sym, [])
-            if not raw:
-                return None, "no data"
-            return self._fmt(raw, limit), None
-        except Exception as e:
-            return None, str(e)[:80]
-
-    def _fmt(self, raw, limit):
-        out = []
-        for c in raw[-limit:]:
-            try:
-                if isinstance(c, (list, tuple)) and len(c) >= 5:
-                    t,o,h,l,cl = int(c[0]),float(c[1]),float(c[2]),float(c[3]),float(c[4])
-                    v = float(c[5]) if len(c) > 5 else 1.0
-                elif isinstance(c, dict):
-                    t = int(c.get("time", c.get("t", 0)))
-                    o = float(c.get("open", c.get("o", 0)))
-                    h = float(c.get("high", c.get("h", o)))
-                    l = float(c.get("low",  c.get("l", o)))
-                    cl= float(c.get("close",c.get("c", 0)))
-                    v = float(c.get("volume",c.get("v", 1)))
-                else: continue
-                if cl > 0: out.append({"t":t,"o":o,"h":h,"l":l,"c":cl,"v":v})
-            except: continue
-        return out
-
-po = POClient()
-clients = set()
-
-async def process(action, data):
-    if action == "connect":
-        ssid = data.get("ssid", "").strip()
-        if not ssid: return {"success": False, "error": "empty ssid"}
-        ok, msg = await po.connect(ssid)
-        return {"success": ok, "action": "connect", "message": msg,
-                "balance": po.balance, "connected": ok, "server": po.server}
-                
-    elif action == "status":
-        return {"success": True, "action": "status",
-                "connected": po.connected, "balance": po.balance,
-                "server": po.server, "time": datetime.now().strftime("%H:%M:%S")}
-                
-    elif action == "candles":
-        pair = data.get("pair", "EURUSD")
-        tf   = int(data.get("tf", 1))
-        lim  = int(data.get("limit", 200))
-        c, e = await po.get_candles(pair, tf * 60, lim)
-        if e:
-            return {"success": False, "action": "candles", "pair": pair, "error": e, "id": data.get("id")}
-        return {"success": True, "action": "candles", "pair": pair, "count": len(c), "data": c, "id": data.get("id")}
-
-    elif action == "scan":
-        pairs = data.get("pairs", list(ALL_PAIRS.keys()))
-        tf    = int(data.get("tf", 1))
-        lim   = int(data.get("limit", 200))
-        results = {}
-        sem = asyncio.Semaphore(3)
-
-        async def fp(pair):
-            async with sem:
-                c, e = await po.get_candles(pair, tf * 60, lim)
-                if c:
-                    results[pair] = {"success": True, "count": len(c), "data": c, "last_price": c[-1]["c"]}
-                else:
-                    results[pair] = {"success": False, "error": e or "no data"}
-                await asyncio.sleep(0.2)
-
-        await asyncio.gather(*[fp(p) for p in pairs])
-        return {"success": True, "action": "scan", "results": results, "time": datetime.now().strftime("%H:%M:%S"), "id": data.get("id")}
-
-    elif action == "disconnect":
-        await po.disconnect()
-        return {"success": True, "action": "disconnect"}
-
-    return {"success": False, "error": "unknown action"}
-
-async def browser_ws_handler(request):
-    ws = web.WebSocketResponse()
-    await ws.prepare(request)
-    clients.add(ws)
-    try:
-        async for msg in ws:
-            if msg.type == WSMsgType.TEXT:
-                try:
-                    data = json.loads(msg.data)
-                    resp = await process(data.get("action", ""), data)
-                    await ws.send_str(json.dumps(resp, ensure_ascii=False))
-                except Exception as e:
-                    await ws.send_str(json.dumps({"success": False, "error": str(e)[:100]}))
-    except Exception as e:
-        logger.error(f"Browser handler error: {e}")
-    finally:
-        clients.discard(ws)
-    return ws
-
-async def home_handler(request):
+async def home(request):
     if not INDEX_FILE.exists():
         return web.Response(text="index.html not found", status=500)
     return web.FileResponse(INDEX_FILE)
 
+async def get_pairs(request):
+    return json_response({
+        "ok": True,
+        "connected": state["connected"],
+        "prices": prices,
+        "updated_at": state["last_update"]
+    })
+def start_api_sync(auth_token):
+    global api_instance
+    try:
+        # الاستيراد الرسمي المتوافق مع وثائق مستند الـ Docs المرفق
+        from pocketoptionapi.stable_api import PocketOptionAPI
+        api_instance = PocketOptionAPI(auth_token)
+        return api_instance.connect()
+    except Exception as e:
+        logger.error(f"Sync API connection failed: {e}")
+        return False
+
+async def connect_provider(request):
+    global api_instance
+    try: body = await request.json()
+    except: return json_response({"ok": False, "error": "Invalid JSON"}, status=400)
+    
+    auth = body.get("auth") or body.get("ssid") or body.get("session")
+    if not auth or not isinstance(auth, str) or len(auth.strip()) < 10:
+        return json_response({"ok": False, "error": "Invalid or missing token"}, status=400)
+    
+    auth_token = auth.strip()
+    
+    # تشغيل الاتصال التزامني في Thread مستقل تماماً تماشياً مع معايير الملف التعليمي
+    loop = asyncio.get_running_loop()
+    connection_success = await loop.run_in_executor(executor, start_api_sync, auth_token)
+    
+    if connection_success:
+        state["connected"] = True
+        state["last_error"] = None
+        state["last_update"] = int(time.time())
+        asyncio.create_task(track_prices_loop())
+        return json_response({"ok": True, "message": "Successfully connected via stable library!"})
+    else:
+        state["connected"] = False
+        state["last_error"] = "Authentication rejected by platform"
+        return json_response({"ok": False, "error": state["last_error"]}, status=400)
+
+async def track_prices_loop():
+    global api_instance
+    symbols = ["EURUSD", "GBPUSD", "EURUSD_OTC", "GBPUSD_OTC"]
+    while state["connected"] and api_instance:
+        try:
+            if hasattr(api_instance, "get_realtime_candles"):
+                for asset in symbols:
+                    candles = api_instance.get_realtime_candles(asset)
+                    if candles:
+                        prices[asset] = list(candles.values())[-1] if isinstance(candles, dict) else candles[-1]
+                        state["last_update"] = int(time.time())
+            await asyncio.sleep(0.5)
+        except Exception as e:
+            logger.warning(f"Price tracking warning: {e}")
+            await asyncio.sleep(1)
+
+async def disconnect_provider(request):
+    global api_instance
+    state["connected"] = False
+    if api_instance:
+        try: api_instance.close()
+        except: pass
+        api_instance = None
+    return json_response({"ok": True, "message": "Disconnected successfully"})
+
 app = web.Application()
-app.router.add_get("/", home_handler)
-app.router.add_get("/ws", browser_ws_handler)
+app.router.add_get("/", home)
+app.router.add_get("/api/pairs", get_pairs)
+app.router.add_post("/api/connect", connect_provider)
+app.router.add_post("/api/disconnect", disconnect_provider)
 
 if __name__ == "__main__":
     web.run_app(app, host="0.0.0.0", port=PORT)
