@@ -4,6 +4,7 @@ import traceback
 import time
 import os
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from aiohttp import web, WSMsgType
@@ -48,9 +49,22 @@ class POClient:
         self._pending = {}
         self._lock = asyncio.Lock()
 
-    async def connect(self, ssid):
+    async def connect(self, raw_input):
         import aiohttp
-        self.ssid = ssid
+        # محرك الفرز التلقائي المستحدث للـ SSID وحزم الـ JSON الطويلة
+        clean_ssid = raw_input.strip()
+        if '"session"' in clean_ssid or "auth" in clean_ssid:
+            match = re.search(r'"session"\s*:\s*"([^"]+)"', clean_ssid)
+            if match:
+                clean_ssid = match.group(1)
+            else:
+                match_ssid = re.search(r'([a-f0-9]{32})', clean_ssid)
+                if match_ssid: clean_ssid = match_ssid.group(1)
+
+        self.ssid = clean_ssid
+        if len(self.ssid) != 32:
+            return False, f"Invalid SSID extracted: Length is {len(self.ssid)}, must be 32"
+
         if self.ws:
             try: await self.ws.close()
             except: pass
@@ -58,7 +72,7 @@ class POClient:
         for url in PO_SERVERS:
             host = url.split("//")[1].split("/")[0]
             try:
-                logger.info(f"Trying {host}...")
+                logger.info(f"Trying {host} with SSID: {self.ssid[:6]}...")
                 headers = {
                     "Origin": "https://po.trade",
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -71,7 +85,7 @@ class POClient:
                 await asyncio.sleep(0.5)
                 
                 auth = {
-                    "session": ssid, "isDemo": 0, "uid": 0,
+                    "session": self.ssid, "isDemo": 0, "uid": 0,
                     "platform": 2, "isFastHistory": True, "isOptimized": True
                 }
                 await ws.send_str(f'42["auth",{json.dumps(auth)}]')
@@ -103,7 +117,7 @@ class POClient:
                     logger.info(f"Connected! ${self.balance:.2f} via {host}")
                     asyncio.create_task(self._recv_loop())
                     asyncio.create_task(self._ping_loop())
-                    return True, f"Connected! ${self.balance:.2f} via {host}"
+                    return True, f"Connected! ${self.balance:.2f}"
 
                 await ws.close()
                 await session.close()
@@ -111,7 +125,7 @@ class POClient:
             except Exception as e:
                 logger.error(f"{host}: {str(e)[:60]}")
 
-        return False, "Failed to connect to all servers"
+        return False, "Auth failed on all PO servers. Check your session."
 
     def _parse(self, msg):
         try:
