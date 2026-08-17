@@ -61,7 +61,10 @@ async def connect_provider(request):
         await disconnect_all()
         session = ClientSession()
         # تصحيح الرابط بدقة هنا لمنع تكرار النقطتين والشرطات المائلة
-        ws_url = "wss://pocketoption.com"
+                part1 = "wss://://pocketoption.com"
+                part2 = "socket.io/?EIO=4&transport=websocket"
+        ws_url = part1 + part2
+
         ws_client = await session.ws_connect(ws_url)
         
         await ws_client.send_str(payload)
