@@ -39,91 +39,84 @@
     <div class="container">
         <header>
             <h1>Pocket Option Live Dashboard</h1>
-            <div class="status-bar">Server Status: <span id="server-status" class="status-offline">Waiting for connection...</span></div>
+            <div class="status-bar">Status: <span id="server-status" class="status-offline">Connecting...</span></div>
         </header>
         <div class="auth-section">
             <div class="form-group">
-                <label for="auth-token">Enter Payload or 32-character SSID:</label>
-                <textarea id="auth-token" rows="2" placeholder="Paste 42 payload or SSID here..."></textarea>
+                <label for="auth-token">Enter Pocket Option SSID (32 Chars):</label>
+                <textarea id="auth-token" rows="2" placeholder="Paste your SSID token here..."></textarea>
             </div>
             <div class="btn-group">
-                <button class="btn-connect" onclick="connectServer()">Start Live Stream</button>
-                <button class="btn-disconnect" onclick="disconnectServer()">Disconnect</button>
+                <button class="btn-connect" onclick="connectPO()">Connect Platform</button>
+                <button class="btn-disconnect" onclick="disconnectPO()">Disconnect</button>
             </div>
         </div>
         <div class="tables-container">
             <div class="table-card">
-                <h2 class="forex-title">🌐 Global Forex Rates</h2>
+                <h2 class="forex-title">🌐 Global Forex</h2>
                 <table>
-                    <thead><tr><th>Asset Pair</th><th>Current Price</th><th>Volume</th></tr></thead>
+                    <thead><tr><th>Asset</th><th>Live Price</th></tr></thead>
                     <tbody id="forex-tbody">
-                        <tr id="row-EURUSD"><td style="font-weight:bold;">EUR/USD</td><td id="price-EURUSD" class="waiting">Waiting...</td><td id="volume-EURUSD">-</td></tr>
-                        <tr id="row-GBPUSD"><td style="font-weight:bold;">GBP/USD</td><td id="price-GBPUSD" class="waiting">Waiting...</td><td id="volume-GBPUSD">-</td></tr>
+                        <tr id="row-EURUSD"><td style="font-weight:bold;">EUR/USD</td><td id="price-EURUSD" class="waiting">Waiting...</td></tr>
+                        <tr id="row-GBPUSD"><td style="font-weight:bold;">GBP/USD</td><td id="price-GBPUSD" class="waiting">Waiting...</td></tr>
                     </tbody>
                 </table>
             </div>
             <div class="table-card">
-                <h2 class="otc-title">📊 OTC Market Rates</h2>
+                <h2 class="otc-title">📊 OTC Markets</h2>
                 <table>
-                    <thead><tr><th>Asset Pair</th><th>Current Price</th><th>Volume</th></tr></thead>
+                    <thead><tr><th>Asset</th><th>Live Price</th></tr></thead>
                     <tbody id="otc-tbody">
-                        <tr id="row-EURUSD_OTC"><td style="font-weight:bold;">EUR/USD (OTC)</td><td id="price-EURUSD_OTC" class="waiting">Waiting...</td><td id="volume-EURUSD_OTC">-</td></tr>
-                        <tr id="row-GBPUSD_OTC"><td style="font-weight:bold;">GBP/USD (OTC)</td><td id="price-GBPUSD_OTC" class="waiting">Waiting...</td><td id="volume-GBPUSD_OTC">-</td></tr>
+                        <tr id="row-EURUSD_otc"><td style="font-weight:bold;">EUR/USD (OTC)</td><td id="price-EURUSD_otc" class="waiting">Waiting...</td></tr>
+                        <tr id="row-GBPUSD_otc"><td style="font-weight:bold;">GBP/USD (OTC)</td><td id="price-GBPUSD_otc" class="waiting">Waiting...</td></tr>
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
     <script>
-        const oldPrices = {};
-        function updateStatus(text, className) {
-            const el = document.getElementById('server-status');
-            if (el) { el.innerText = text; el.className = className; }
+        let ws; const oldPrices = {}; const pairsToScan = ['EURUSD', 'GBPUSD', 'EURUSD_otc', 'GBPUSD_otc'];
+        function initWebSocket() {
+            const loc = window.location; const wsUri = (loc.protocol === "https:" ? "wss://" : "ws://") + loc.host + "/ws";
+            ws = new WebSocket(wsUri);
+            ws.onopen = () => {
+                document.getElementById('server-status').innerText = "Gateway Connected. Enter SSID.";
+                document.getElementById('server-status').className = "status-online"; startSyncLoop();
+            };
+            ws.onclose = () => {
+                document.getElementById('server-status').innerText = "Gateway Disconnected. Retrying...";
+                document.getElementById('server-status').className = "status-offline"; setTimeout(initWebSocket, 2000);
+            };
+            ws.onmessage = (event) => {
+                try {
+                    const res = JSON.parse(event.data);
+                    if (res.action === "connect") { if (res.success) alert(res.message); else alert("Auth Failed: " + res.error); }
+                    if (res.action === "scan" && res.results) { updateDashboardPrices(res.results); }
+                } catch (e) { console.error(e); }
+            };
         }
-        async function connectServer() {
-            const token = document.getElementById('auth-token').value.trim();
-            if (!token) return alert('Please enter token first!');
-            updateStatus('Connecting to backend...', 'status-offline');
-            try {
-                const res = await fetch('/api/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ auth: token }) });
-                const data = await res.json();
-                if (data.ok) alert('Authenticated! Stream started.');
-                else { alert('Failed: ' + (data.error || 'Unknown')); updateStatus('Rejected by platform', 'status-offline'); }
-            } catch (e) { alert('Error reaching Render backend.'); }
+        function connectPO() {
+            const ssid = document.getElementById('auth-token').value.trim(); if(!ssid) return alert("Please enter SSID first");
+            if(ws && ws.readyState === WebSocket.OPEN) { ws.send(JSON.stringify({ action: "connect", ssid: ssid })); }
         }
-        async function disconnectServer() {
-            try {
-                await fetch('/api/disconnect', { method: 'POST' });
-                alert('Disconnected.'); updateStatus('Disconnected', 'status-offline'); resetPrices();
-            } catch (e) { console.error(e); }
+        function disconnectPO() {
+            if(ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ action: "disconnect" })); alert("Disconnected from platform.");
+                pairsToScan.forEach(k => { const el = document.getElementById(`price-${k}`); if(el) { el.innerText = "Waiting..."; el.className = "waiting"; } });
+            }
         }
-        function resetPrices() {
-            ['EURUSD', 'GBPUSD', 'EURUSD_OTC', 'GBPUSD_OTC'].forEach(k => {
-                const p = document.getElementById(`price-${k}`); const v = document.getElementById(`volume-${k}`);
-                if (p) { p.innerText = 'Waiting...'; p.className = 'waiting'; } if (v) v.innerText = '-';
-            });
+        function updateDashboardPrices(results) {
+            for (const [pair, info] of Object.entries(results)) {
+                const el = document.getElementById(`price-${pair}`);
+                if (el && info.success) {
+                    const price = info.last_price; el.innerText = price;
+                    if (oldPrices[pair]) { el.className = price > oldPrices[pair] ? 'price-up' : (price < oldPrices[pair] ? 'price-down' : el.className); }
+                    oldPrices[pair] = price;
+                }
+            }
         }
-        async function fetchLivePrices() {
-            try {
-                const res = await fetch('/api/pairs'); const data = await res.json();
-                if (data.ok && data.connected) {
-                    updateStatus('Connected & Stream Active', 'status-online');
-                    for (const [pair, candle] of Object.entries(data.prices || {})) {
-                        let price = 0, vol = 0;
-                        if (candle && typeof candle === 'object') { price = candle.close || candle.price || 0; vol = candle.volume || 0; }
-                        else if (typeof candle === 'number') { price = candle; }
-                        const pEl = document.getElementById(`price-${pair}`); const vEl = document.getElementById(`volume-${pair}`);
-                        if (pEl && price > 0) {
-                            pEl.innerText = price;
-                            if (oldPrices[pair]) { pEl.className = price > oldPrices[pair] ? 'price-up' : (price < oldPrices[pair] ? 'price-down' : pEl.className); }
-                            oldPrices[pair] = price;
-                        }
-                        if (vEl && vol > 0) vEl.innerText = vol;
-                    }
-                } else if (data.ok && !data.connected) { updateStatus('Server live, enter Auth details', 'status-offline'); }
-            } catch (err) { console.log('Polling...'); }
-        }
-        setInterval(fetchLivePrices, 1000);
+        function startSyncLoop() { setInterval(() => { if (ws && ws.readyState === WebSocket.OPEN) { ws.send(JSON.stringify({ action: "scan", pairs: pairsToScan, tf: 1, limit: 10 })); } }, 1000); }
+        window.onload = initWebSocket;
     </script>
 </body>
 </html>
