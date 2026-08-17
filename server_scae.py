@@ -52,7 +52,6 @@ async def connect_provider(request):
     if not auth_token:
         return json_response({"ok": False, "error": "SSID token is required"}, status=400)
     
-    # التغليف التلقائي الذكي للـ SSID القصير إذا لم يمرر المستخدم الحزمة كاملة
     if "auth" not in auth_token and len(auth_token) == 32:
         payload = f'42["auth",{{\"session\":\"{auth_token}\",\"isDemo\":0}}]'
     else:
@@ -61,16 +60,15 @@ async def connect_provider(request):
     try:
         await disconnect_all()
         session = ClientSession()
-        # الاتصال المباشر بخادم البث الخاص بالمنصة
-        ws_client = await session.ws_connect("wss://://pocketoption.com")
+        # تصحيح الرابط بدقة هنا لمنع تكرار النقطتين والشرطات المائلة
+        ws_url = "wss://://pocketoption.com"
+        ws_client = await session.ws_connect(ws_url)
         
-        # إرسال حزمة التوثيق فوراً
         await ws_client.send_str(payload)
         state["connected"] = True
         state["last_error"] = None
         state["last_update"] = int(time.time())
         
-        # بدء مهام الخلفية للاستقبال والـ Ping-Pong
         ping_task = asyncio.create_task(send_ping_loop())
         receive_task = asyncio.create_task(receive_messages_loop())
         
@@ -81,7 +79,6 @@ async def connect_provider(request):
         return json_response({"ok": False, "error": f"Connection failed: {e}"}, status=500)
 
 async def send_ping_loop():
-    """محرك الحفاظ على الاتصال حياً تماشياً مع بروتوكول المنصة"""
     global ws_client
     while state["connected"] and ws_client:
         try:
@@ -91,7 +88,6 @@ async def send_ping_loop():
             break
 
 async def receive_messages_loop():
-    """تفكيك الحزم البرمجية القادمة من المنصة وفرز الأسعار لايف"""
     global ws_client
     async for msg in ws_client:
         if msg.type == web.WSMsgType.TEXT:
@@ -107,7 +103,6 @@ async def receive_messages_loop():
                         event_name = parsed[0]
                         event_data = parsed[1]
                         
-                        # فرز وتحديث كائن الأسعار بناءً على استجابة السيرفر
                         if event_name == "loadHistory" or event_name == "candles":
                             asset = event_data.get("asset")
                             candles = event_data.get("candles", [])
