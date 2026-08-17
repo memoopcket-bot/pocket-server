@@ -1,153 +1,129 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pocket Option Live Dashboard</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0d0e12; color: #e2e4e9; margin: 0; padding: 20px; }
-        .container { max-width: 900px; margin: auto; }
-        .panel { background: #161920; padding: 25px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); border: 1px solid #232836; margin-bottom: 25px; text-align: center; }
-        h2 { margin-top: 0; color: #ffffff; }
-        textarea { width: 100%; height: 80px; background: #0d0e12; color: #ffffff; border: 1px solid #2f364a; border-radius: 8px; padding: 12px; font-size: 14px; box-sizing: border-box; resize: none; margin-bottom: 15px; text-align: left; dir: ltr; }
-        .btn-group { display: flex; gap: 15px; justify-content: center; }
-        button { font-weight: bold; padding: 12px 30px; font-size: 16px; border-radius: 6px; cursor: pointer; border: none; transition: 0.2s; }
-        .btn-connect { background: #28a745; color: white; }
-        .btn-connect:hover { background: #218838; }
-        .btn-disconnect { background: #dc3545; color: white; }
-        .btn-disconnect:hover { background: #c82333; }
-        .status-bar { display: flex; justify-content: space-around; background: #1c202b; padding: 15px; border-radius: 8px; margin-bottom: 25px; font-weight: bold; border: 1px solid #232836; }
-        .status-active { color: #28a745; }
-        .status-inactive { color: #dc3545; }
-        .tables-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        @media (max-width: 768px) { .tables-grid { grid-template-columns: 1fr; } }
-        .table-card { background: #161920; border-radius: 12px; border: 1px solid #232836; padding: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
-        .table-card h3 { margin-top: 0; padding-bottom: 10px; border-bottom: 1px solid #232836; color: #007bff; text-align: center; }
-        table { width: 100%; border-collapse: collapse; text-align: center; }
-        th { background: #1c202b; color: #9aa0a6; padding: 10px; font-size: 14px; }
-        td { padding: 12px 10px; border-bottom: 1px solid #1c202b; font-size: 15px; font-family: monospace; font-weight: bold; }
-        .price-up { color: #28a745; animation: flash-green 0.3s; }
-        @keyframes flash-green { from { background: rgba(40,167,69,0.2); } to { background: transparent; } }
+        :root { --bg: #0b0e14; --card: #151a22; --text: #e2e8f0; --green: #00e676; --red: #ff3d00; --border: #232d38; }
+        body { font-family: sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid var(--border); padding-bottom: 10px; }
+        header h1 { color: var(--green); margin: 0 0 5px 0; font-size: 1.5rem; }
+        .status-bar { display: inline-block; padding: 5px 12px; border-radius: 20px; background: #1a233a; font-weight: bold; font-size: 0.85rem; }
+        .status-online { color: var(--green); }
+        .status-offline { color: var(--red); }
+        .auth-section { background: var(--card); border: 1px solid var(--border); padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .form-group { display: flex; flex-direction: column; gap: 8px; }
+        label { font-weight: bold; color: #a0aec0; font-size: 0.9rem; }
+        textarea { background: #0b0e14; border: 1px solid var(--border); color: #fff; padding: 10px; border-radius: 6px; resize: vertical; font-family: monospace; }
+        .btn-group { display: flex; gap: 10px; margin-top: 10px; }
+        button { flex: 1; padding: 10px; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; }
+        .btn-connect { background: var(--green); color: #000; }
+        .btn-disconnect { background: var(--red); color: #fff; }
+        .tables-container { display: grid; grid-template-columns: 1fr; gap: 15px; }
+        @media (min-width: 768px) { .tables-container { grid-template-columns: 1fr 1fr; } }
+        .table-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 15px; }
+        .table-card h2 { margin: 0 0 10px 0; border-bottom: 1px solid var(--border); padding-bottom: 8px; font-size: 1.1rem; }
+        .forex-title { color: #38bdf8; }
+        .otc-title { color: #f59e0b; }
+        table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem; }
+        th, td { padding: 10px 8px; border-bottom: 1px solid var(--border); }
+        th { color: #a0aec0; }
+        .price-up { color: var(--green); font-weight: bold; }
+        .price-down { color: var(--red); font-weight: bold; }
+        .waiting { color: #718096; font-style: italic; }
     </style>
 </head>
 <body>
-
-<div class="container">
-    <div class="panel">
-        <h2>لوحة تحكم أسعار Pocket Option اللحظية</h2>
-        <p style="color: #9aa0a6; font-size: 14px;">الصق حزمة التوثيق الكاملة 42["auth",...] لبدء بث الأسعار الفوري</p>
-        <textarea id="payloadInput" placeholder='الصق الحزمة الكاملة هنا...'></textarea>
-        <div class="btn-group">
-            <button class="btn-connect" onclick="connectServer()">اتصال بالمنصة</button>
-            <button class="btn-disconnect" onclick="disconnectServer()">قطع الاتصال</button>
+    <div class="container">
+        <header>
+            <h1>Pocket Option Live Dashboard</h1>
+            <div class="status-bar">Server Status: <span id="server-status" class="status-offline">Waiting for connection...</span></div>
+        </header>
+        <div class="auth-section">
+            <div class="form-group">
+                <label for="auth-token">Enter Payload or 32-character SSID:</label>
+                <textarea id="auth-token" rows="2" placeholder="Paste 42 payload or SSID here..."></textarea>
+            </div>
+            <div class="btn-group">
+                <button class="btn-connect" onclick="connectServer()">Start Live Stream</button>
+                <button class="btn-disconnect" onclick="disconnectServer()">Disconnect</button>
+            </div>
+        </div>
+        <div class="tables-container">
+            <div class="table-card">
+                <h2 class="forex-title">🌐 Global Forex Rates</h2>
+                <table>
+                    <thead><tr><th>Asset Pair</th><th>Current Price</th><th>Volume</th></tr></thead>
+                    <tbody id="forex-tbody">
+                        <tr id="row-EURUSD"><td style="font-weight:bold;">EUR/USD</td><td id="price-EURUSD" class="waiting">Waiting...</td><td id="volume-EURUSD">-</td></tr>
+                        <tr id="row-GBPUSD"><td style="font-weight:bold;">GBP/USD</td><td id="price-GBPUSD" class="waiting">Waiting...</td><td id="volume-GBPUSD">-</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="table-card">
+                <h2 class="otc-title">📊 OTC Market Rates</h2>
+                <table>
+                    <thead><tr><th>Asset Pair</th><th>Current Price</th><th>Volume</th></tr></thead>
+                    <tbody id="otc-tbody">
+                        <tr id="row-EURUSD_OTC"><td style="font-weight:bold;">EUR/USD (OTC)</td><td id="price-EURUSD_OTC" class="waiting">Waiting...</td><td id="volume-EURUSD_OTC">-</td></tr>
+                        <tr id="row-GBPUSD_OTC"><td style="font-weight:bold;">GBP/USD (OTC)</td><td id="price-GBPUSD_OTC" class="waiting">Waiting...</td><td id="volume-GBPUSD_OTC">-</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
-
-    <div class="status-bar">
-        <div>الحالة: <span id="connStatus" class="status-inactive">غير متصل</span></div>
-        <div>الأزواج النشطة: <span id="activeCount" style="color: #007bff;">0</span></div>
-    </div>
-
-    <div class="tables-grid">
-        <!-- جدول الفوركس العادي -->
-        <div class="table-card">
-            <h3>أزواج الفوركس العالمية 📡</h3>
-            <table>
-                <thead>
-                    <tr>
-                        <th>الزوج</th>
-                        <th>السعر اللحظي</th>
-                    </tr>
-                </thead>
-                <tbody id="forexTableBody">
-                    <tr><td colspan="2" style="color:#6c757d;">في انتظار الاتصال...</td></tr>
-                </tbody>
-            </table>
-        </div>
-
-        <!-- جدول الـ OTC -->
-        <div class="table-card">
-            <h3>أزواج الـ OTC المباشرة 📊</h3>
-            <table>
-                <thead>
-                    <tr>
-                        <th>الزوج</th>
-                        <th>السعر اللحظي</th>
-                    </tr>
-                </thead>
-                <tbody id="otcTableBody">
-                    <tr><td colspan="2" style="color:#6c757d;">في انتظار الاتصال...</td></tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
-</div>
-
-<script>
-    let oldPrices = {};
-
-    async function connectServer() {
-        const payload = document.getElementById('payloadInput').value.trim();
-        if(!payload) return alert('الرجاء لصق حزمة التوثيق أولاً!');
-        
-        try {
-            const res = await fetch('/api/connect', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ ssid: payload })
+    <script>
+        const oldPrices = {};
+        function updateStatus(text, className) {
+            const el = document.getElementById('server-status');
+            el.innerText = text; el.className = className;
+        }
+        async function connectServer() {
+            const token = document.getElementById('auth-token').value.trim();
+            if (!token) return alert('Please enter token first!');
+            updateStatus('Connecting to backend...', 'status-offline');
+            try {
+                const res = await fetch('/api/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ auth: token }) });
+                const data = await res.json();
+                if (data.ok) alert('Authenticated! Stream started.');
+                else { alert('Failed: ' + (data.error || 'Unknown')); updateStatus('Rejected by platform', 'status-offline'); }
+            } catch (e) { alert('Error reaching Render backend.'); }
+        }
+        async function disconnectServer() {
+            try {
+                await fetch('/api/disconnect', { method: 'POST' });
+                alert('Disconnected.'); updateStatus('Disconnected', 'status-offline'); resetPrices();
+            } catch (e) { console.error(e); }
+        }
+        function resetPrices() {
+            ['EURUSD', 'GBPUSD', 'EURUSD_OTC', 'GBPUSD_OTC'].forEach(k => {
+                const p = document.getElementById(`price-${k}`); const v = document.getElementById(`volume-${k}`);
+                if (p) { p.innerText = 'Waiting...'; p.className = 'waiting'; } if (v) v.innerText = '-';
             });
-            const data = await res.json();
-            if(data.status === 'connected') {
-                document.getElementById('connStatus').innerText = 'متصل بنجاح';
-                document.getElementById('connStatus').className = 'status-active';
-            }
-        } catch(e) { alert('خطأ في إرسال طلب الاتصال للسيرفر'); }
-    }
-
-    async function disconnectServer() {
-        try {
-            await fetch('/api/disconnect', { method: 'POST' });
-            document.getElementById('connStatus').innerText = 'غير متصل';
-            document.getElementById('connStatus').className = 'status-inactive';
-            document.getElementById('forexTableBody').innerHTML = '<tr><td colspan="2" style="color:#6c757d;">تم قطع الاتصال</td></tr>';
-            document.getElementById('otcTableBody').innerHTML = '<tr><td colspan="2" style="color:#6c757d;">تم قطع الاتصال</td></tr>';
-            document.getElementById('activeCount').innerText = '0';
-            oldPrices = {};
-        } catch(e) {}
-    }
-
-    setInterval(async () => {
-        try {
-            const res = await fetch('/api/pairs');
-            const data = await res.json();
-            
-            if(data.pairs && data.pairs.length > 0) {
-                let forexHTML = '';
-                let otcHTML = '';
-                let activePairs = 0;
-
-                data.pairs.forEach(pair => {
-                    if(pair.price > 0) activePairs++;
-                    const isOTC = pair.otc;
-                    const displayName = pair.name.replace(" / OTC", "");
-                    
-                    const isChanged = oldPrices[pair.asset] && oldPrices[pair.asset] !== pair.price;
-                    const priceClass = isChanged ? 'price-up' : '';
-                    oldPrices[pair.asset] = pair.price;
-
-                    const rowHTML = `<tr><td>${displayName}</td><td class="${priceClass}">${pair.price.toFixed(5)}</td></tr>`;
-                    
-                    if(isOTC) otcHTML += rowHTML;
-                    else forexHTML += rowHTML;
-                });
-
-                document.getElementById('activeCount').innerText = activePairs;
-                if(forexHTML) document.getElementById('forexTableBody').innerHTML = forexHTML;
-                if(otcHTML) document.getElementById('otcTableBody').innerHTML = otcHTML;
-            }
-        } catch(e) {}
-    }, 1000);
-</script>
-
+        }
+        async function fetchLivePrices() {
+            try {
+                const res = await fetch('/api/pairs'); const data = await res.json();
+                if (data.ok && data.connected) {
+                    updateStatus('Connected & Stream Active', 'status-online');
+                    for (const [pair, candle] of Object.entries(data.prices || {})) {
+                        let price = 0, vol = 0;
+                        if (candle && typeof candle === 'object') { price = candle.close || candle.price || 0; vol = candle.volume || 0; }
+                        else if (typeof candle === 'number') { price = candle; }
+                        const pEl = document.getElementById(`price-${pair}`); const vEl = document.getElementById(`volume-${pair}`);
+                        if (pEl && price > 0) {
+                            pEl.innerText = price;
+                            if (oldPrices[pair]) { pEl.className = price > oldPrices[pair] ? 'price-up' : (price < oldPrices[pair] ? 'price-down' : pEl.className); }
+                            oldPrices[pair] = price;
+                        }
+                        if (vEl && vol > 0) vEl.innerText = vol;
+                    }
+                } else if (data.ok && !data.connected) { updateStatus('Server live, enter Auth details', 'status-offline'); }
+            } catch (err) { console.log('Polling...'); }
+        }
+        setInterval(fetchLivePrices, 1000);
+    </script>
 </body>
 </html>
