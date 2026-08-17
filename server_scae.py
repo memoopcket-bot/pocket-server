@@ -4,21 +4,15 @@ import logging
 import os
 import time
 from pathlib import Path
-from aiohttp import web
-from concurrent.futures import ThreadPoolExecutor
+from aiohttp import web, ClientSession
 
-# إعداد السجلات لمراقبة Render Logs
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s: %(message)s",
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
 logger = logging.getLogger("pocket-server")
 
 PORT = int(os.getenv("PORT", "10000"))
 BASE_DIR = Path(__file__).resolve().parent
 INDEX_FILE = BASE_DIR / "index.html"
 
-# مخزن البيانات والحالة
 prices = {}
 state = {
     "connected": False,
@@ -27,33 +21,19 @@ state = {
     "started_at": int(time.time()),
 }
 
-api_instance = None
-executor = ThreadPoolExecutor(max_workers=2)
+ws_client = None
+ping_task = None
+receive_task = None
 
 def json_response(data, status=200):
-    return web.json_response(
-        data,
-        status=status,
-        dumps=lambda v: json.dumps(v, ensure_ascii=False, default=str),
-    )
+    return web.json_response(data, status=status, dumps=lambda v: json.dumps(v, ensure_ascii=False))
 
 async def home(request):
     if not INDEX_FILE.exists():
-        return web.Response(text="ملف index.html غير موجود في السيرفر", status=500)
+        return web.Response(text="index.html not found on server", status=500)
     return web.FileResponse(INDEX_FILE)
 
-async def health(request):
-    return json_response({
-        "ok": True,
-        "server_uptime_seconds": int(time.time()) - state["started_at"],
-        "pocket_connected": state["connected"],
-        "last_error": state["last_error"],
-        "last_update": state["last_update"],
-        "tracked_pairs_count": len(prices)
-    })
-
 async def get_pairs(request):
-    # مسار الواجهة لقراءة الأسعار اللحظية بشكل صامت كل ثانية
     return json_response({
         "ok": True,
         "connected": state["connected"],
@@ -61,82 +41,98 @@ async def get_pairs(request):
         "updated_at": state["last_update"]
     })
 
-def start_api_sync(auth_token):
-    """تشغيل ربط المكتبة التزامني في Thread منفصل لمنع تجميد السيرفر"""
-    global api_instance
-    try:
-        from pocketoptionapi.stable_api import PocketOptionAPI
-        # بناء الكائن باستخدام الـ SSID الممرر من الواجهة
-        api_instance = PocketOptionAPI(auth_token)
-        return api_instance.connect()
-    except Exception as e:
-        logger.error(f"خطأ أثناء تشغيل المكتبة التزامنية: {e}")
-        return False
-
 async def connect_provider(request):
-    global api_instance
+    global ws_client, ping_task, receive_task
     try:
         body = await request.json()
-    except Exception:
-        return json_response({"ok": False, "error": "JSON حزمة غير صالحة"}, status=400)
+    except:
+        return json_response({"ok": False, "error": "Invalid JSON"}, status=400)
     
-    auth = body.get("auth") or body.get("ssid")
-    if not auth or not isinstance(auth, str) or len(auth.strip()) < 10:
-        return json_response({"ok": False, "error": "رمز التوثيق (SSID) غير صالح أو مفقود"}, status=400)
+    auth_token = body.get("auth", "").strip()
+    if not auth_token:
+        return json_response({"ok": False, "error": "SSID token is required"}, status=400)
     
-    auth_token = auth.strip()
-    setStatus("جارٍ محاولة الاتصال بالخوادم البعيدة...")
-    
-    # تشغيل الاتصال عبر الـ Thread Pool
-    loop = asyncio.get_running_loop()
-    connection_success = await loop.run_in_executor(executor, start_api_sync, auth_token)
-    
-    if connection_success:
+    # التغليف التلقائي الذكي للـ SSID القصير إذا لم يمرر المستخدم الحزمة كاملة
+    if "auth" not in auth_token and len(auth_token) == 32:
+        payload = f'42["auth",{{\"session\":\"{auth_token}\",\"isDemo\":0}}]'
+    else:
+        payload = auth_token
+
+    try:
+        await disconnect_all()
+        session = ClientSession()
+        # الاتصال المباشر بخادم البث الخاص بالمنصة
+        ws_client = await session.ws_connect("wss://://pocketoption.com")
+        
+        # إرسال حزمة التوثيق فوراً
+        await ws_client.send_str(payload)
         state["connected"] = True
         state["last_error"] = None
         state["last_update"] = int(time.time())
-        logger.info("تم التوثيق والاتصال بنجاح بـ Pocket Option")
         
-        # بدء حلقة قراءة الأسعار في الخلفية بشكل منفصل
-        asyncio.create_task(track_prices_loop())
-        return json_response({"ok": True, "message": "تم الاتصال وبث الأسعار بدأ بنجاح"})
-    else:
+        # بدء مهام الخلفية للاستقبال والـ Ping-Pong
+        ping_task = asyncio.create_task(send_ping_loop())
+        receive_task = asyncio.create_task(receive_messages_loop())
+        
+        return json_response({"ok": True, "message": "Stream connected successfully"})
+    except Exception as e:
         state["connected"] = False
-        state["last_error"] = "فشل التوثيق: خوادم المنصة رفضت الـ SSID"
-        return json_response({"ok": False, "error": state["last_error"]}, status=400)
+        state["last_error"] = str(e)
+        return json_response({"ok": False, "error": f"Connection failed: {e}"}, status=500)
 
-async def track_prices_loop():
-    """حلقة مستمرة لقراءة الأسعار من كائن الـ API وتحديث الـ State داخلياً"""
-    global api_instance
-    while state["connected"] and api_instance:
+async def send_ping_loop():
+    """محرك الحفاظ على الاتصال حياً تماشياً مع بروتوكول المنصة"""
+    global ws_client
+    while state["connected"] and ws_client:
         try:
-            # محاولة جلب الشموع اللحظية بناءً على توثيق المستودع المرسل
-            if hasattr(api_instance, "get_realtime_candles"):
-                for asset in ["EURUSD", "GBPUSD", "EURUSD_OTC", "GBPUSD_OTC"]:
-                    candles = api_instance.get_realtime_candles(asset)
-                    if candles:
-                        # أخذ آخر سعر محدث (الاطار اللحظي)
-                        prices[asset] = list(candles.values())[-1] if isinstance(candles, dict) else candles[-1]
-                        state["last_update"] = int(time.time())
-            await asyncio.sleep(0.5) # تحديث فائق السرعة كل نصف ثانية
-        except Exception as e:
-            logger.warning(f"تحذير أثناء قراءة الأسعار: {e}")
-            await asyncio.sleep(1)
+            await ws_client.send_str("3")
+            await asyncio.sleep(25)
+        except:
+            break
+
+async def receive_messages_loop():
+    """تفكيك الحزم البرمجية القادمة من المنصة وفرز الأسعار لايف"""
+    global ws_client
+    async for msg in ws_client:
+        if msg.type == web.WSMsgType.TEXT:
+            raw_data = msg.data
+            if raw_data == "2":
+                await ws_client.send_str("3")
+                continue
+            
+            if raw_data.startswith("42"):
+                try:
+                    parsed = json.loads(raw_data[2:])
+                    if isinstance(parsed, list) and len(parsed) > 1:
+                        event_name = parsed[0]
+                        event_data = parsed[1]
+                        
+                        # فرز وتحديث كائن الأسعار بناءً على استجابة السيرفر
+                        if event_name == "loadHistory" or event_name == "candles":
+                            asset = event_data.get("asset")
+                            candles = event_data.get("candles", [])
+                            if asset and candles:
+                                prices[asset] = candles[-1]
+                                state["last_update"] = int(time.time())
+                except:
+                    pass
+
+async def disconnect_all():
+    global ws_client, ping_task, receive_task
+    state["connected"] = False
+    if ping_task: ping_task.cancel()
+    if receive_task: receive_task.cancel()
+    if ws_client:
+        try: await ws_client.close()
+        except: pass
+        ws_client = None
 
 async def disconnect_provider(request):
-    global api_instance
-    state["connected"] = False
-    if api_instance:
-        try:
-            api_instance.close()
-        except Exception:
-            pass
-        api_instance = None
-    return json_response({"ok": True, "message": "تم قطع الاتصال بالخادم بنجاح"})
+    await disconnect_all()
+    return json_response({"ok": True, "message": "Disconnected successfully"})
 
 app = web.Application()
 app.router.add_get("/", home)
-app.router.add_get("/health", health)
 app.router.add_get("/api/pairs", get_pairs)
 app.router.add_post("/api/connect", connect_provider)
 app.router.add_post("/api/disconnect", disconnect_provider)
