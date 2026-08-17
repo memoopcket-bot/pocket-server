@@ -1,2 +1,4 @@
 aiohttp==3.11.11
 ujson==5.10.0
+websockets==11.0
+git+https://github.com
