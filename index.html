@@ -159,12 +159,13 @@
         </div>
         <div id="logBox" class="log-box">جاهز تماماً ومستمع لحزمة التوثيق...</div>
     </div>
+
+</div>
 <script>
     let localWS = null; 
     let renderWS = null; 
     let isConnected = false;
 
-    // تحديد رابط الـ WebSocket لسيرفر ريندر تلقائياً بناءً على النطاق الحالي
     const RENDER_WS_URL = window.location.origin.replace(/^http/, 'ws');
 
     function log(msg, isError = false) {
@@ -184,21 +185,18 @@
 
         let ssid = "";
 
-        // محرك ذكي مخصص لتفكيك المصفوفات النصية المعقدة المنسوخة من الهاتف واقتناص الـ session_id
         if (rawInput.includes("session") && rawInput.includes("session_id")) {
             try {
-                // البحث البرمجي عن الـ session_id المكون من 32 حرفاً ورقم
                 const match = rawInput.match(/session_id\\";s:32:\\"([a-f0-9]{32})\\"/);
                 if (match && match[1]) {
                     ssid = match[1];
-                    log(`✅ تم اقتناص الـ SSID بنجاح من المصفوفة المركبة: ${ssid}`);
+                    log(`✅ تم اقتناص الـ SSID بنجاح من مصفوفة الهاتف: ${ssid}`);
                 }
             } catch (e) {
-                log("⚠️ تنبيه: فشل تفكيك المصفوفة المعقدة تلقائياً.");
+                log("⚠️ تنبيه: فشل تفكيك المصفوفة تلقائياً.");
             }
         }
 
-        // إذا كان النص المدخل عبارة عن الـ SSID الصافي مباشرة أو فشل التفكيك أعلاه
         if (!ssid) {
             if (rawInput.startsWith("42")) rawInput = rawInput.substring(2);
             try {
@@ -219,7 +217,7 @@
         if (localWS) { localWS.close(); }
 
         const targetServer = "wss://api-eu.po.market/socket.io/?EIO=4&transport=websocket";
-        log(`🌐 جاري توجيه طلب الـ WebSocket إلى خادم المنصة الرئيسي...`);
+        log(`🌐 جاري توجيه طلب الـ WebSocket إلى خادم المنصة...`);
         
         localWS = new WebSocket(targetServer);
 
@@ -230,20 +228,15 @@
 
         localWS.onmessage = function(evt) {
             const msg = evt.data;
-            
-            // طباعة كاشفة وفورية لكل رد يصل من السيرفر لمعرفة النتيجة وحل الغموض
             log(`📥 [وارد من المنصة]: ${msg.substring(0, 140)}`);
 
             if (msg === "2") {
                 localWS.send("3");
-                log("📤 [صادر للمنصة]: الرد بـ 3 على نبضة السيرفر (Keep-Alive)");
                 return;
             }
 
             if (msg.startsWith("0")) {
                 log("📥 [خطوة 2]: تم استقبال حزمة الترحيب 0. جاري تمرير التوثيق...");
-                
-                // إرسال الحزمة الأصلية الكاملة والمطابقة للمتصفح البشري لضمان قبول السيرفر للطلب
                 if (originalPacket.startsWith("42")) {
                     localWS.send(originalPacket);
                 } else {
@@ -253,7 +246,7 @@
                     };
                     localWS.send(`42["auth",${JSON.stringify(authPacket)}]`);
                 }
-                log(`📤 [صادر للمنصة]: تم قذف حزمة التوثيق المحمية.`);
+                log(`📤 [صادر للمنصة]: تم إرسال حزمة التوثيق.`);
             }
 
             if (msg.startsWith("42")) {
@@ -263,14 +256,13 @@
                     const eventName = parsed[0];
                     const data = parsed[1];
 
-                    log(`🔔 [حدث مكتشف]: اسم الرد الوارد حالياً هو (${eventName})`);
+                    log(`🔔 [حدث مكتشف]: اسم الرد الوارد هو (${eventName})`);
 
-                    // تحقق مرن وشامل لضمان نجاح الاتصال بمجرد وصول أي حدث تأكيدي من الحساب
                     if (!isConnected && (eventName === "successauth" || eventName === "updateBalance" || eventName === "balanceUpdated" || eventName === "updateAssets")) {
                         isConnected = true;
                         document.getElementById("statusBadge").className = "badge badge-green";
                         document.getElementById("statusBadge").innerText = "متصل بنجاح";
-                        log("🎉 [نجاح كلي] تم قبول التوثيق والبث اللحظي انطلق دون حظر!");
+                        log("🎉 [نجاح كلي] انطلق البث اللحظي للأسعار بنجاح!");
                         connectToRenderServer();
                     }
 
@@ -279,34 +271,33 @@
                         document.getElementById("balanceText").innerText = `$${parseFloat(bal).toFixed(2)}`;
                     }
 
-                    // تمرير البيانات المباشرة المستلمة من هاتفك صامتاً إلى باكيند ريندر لمعالجتها
                     if (renderWS && renderWS.readyState === WebSocket.OPEN) {
                         renderWS.send(JSON.stringify({ action: "pipe_data", event: eventName, payload: data }));
                     }
 
                 } catch (e) {
-                    log(`⚠️ خطأ في تفسير حزمة الـ 42 الواردة: ${e.message}`, true);
+                    log(`⚠️ خطأ في التفسير: ${e.message}`, true);
                 }
             }
         };
 
         localWS.onerror = function(err) {
-            log("❌ خطأ: السيرفر رفض الاتصال فوراً. الحزمة المستعملة ناقصة أو تالفة.", true);
+            log("❌ خطأ: السيرفر قطع الاتصال فوراً. الحزمة منتهية الصلاحية كلياً.", true);
         };
 
         localWS.onclose = function() {
-            log("🔌 مغلق: تم إنهاء الجلسة وقطع الاتصال مع خادم المنصة.");
+            log("🔌 مغلق: تم قطع الاتصال مع خادم المنصة.");
             updateDisconnectionUI();
         };
     }
 
     function connectToRenderServer() {
         if (renderWS) { renderWS.close(); }
-        log("☁️ جاري ربط نفق البيانات المباشر بسيرفر الباكيند (Render)...");
+        log("☁️ جاري ربط نفق البيانات المباشر بباكيند Render...");
         renderWS = new WebSocket(RENDER_WS_URL);
 
         renderWS.onopen = function() {
-            log("✅ تم ربط الباكيند السحابي بنجاح، السيرفر مستعد لفرز الشموع.");
+            log("✅ تم ربط الباكيند بنجاح، السيرفر مستعد لفرز الشموع.");
             renderWS.send(JSON.stringify({ action: "status" }));
         };
 
@@ -314,7 +305,6 @@
             try {
                 const resp = JSON.parse(evt.data);
                 if (resp.action === "candles" && resp.success) {
-                    log(`📊 تم استلام وفرز الشموع لزوج [${resp.pair}] من الباكيند.`);
                     updateTableWithCandles(resp.pair, resp.data);
                 }
             } catch (e) {}
@@ -323,7 +313,7 @@
 
     function requestLiveCandles() {
         if (!isConnected || !localWS) {
-            log("⚠️ خطأ: لا يمكن طلب الشموع والسيرفر منقطع كلياً!", true);
+            log("⚠️ خطأ: لا يمكن طلب الشموع والسيرفر منقطع!", true);
             return;
         }
         const pair = document.getElementById("pairSelect").value;
@@ -371,7 +361,7 @@
         if (localWS) localWS.close();
         if (renderWS) renderWS.close();
         updateDisconnectionUI();
-        log("🔌 تم قطع كافة الاتصالات بالكامل.");
+        log("🔌 تم قطع الاتصال بالكامل.");
     }
 
     function updateDisconnectionUI() {
@@ -387,5 +377,3 @@
 </script>
 </body>
 </html>
-
-</div>
