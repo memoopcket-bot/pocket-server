@@ -1,22 +1,14 @@
 import asyncio
 import json
 import datetime
+import websockets
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-# استيراد محرك الاتصال من مكتبتكنّ الخاصة الموجودة في الصورة
-try:
-    from server_scae import PocketOptionAPI  # أو اسم الكلاس المعتمد داخل ملفكم
-except ImportError:
-    # هذا مجرد تمثيل مرن لضمان عمل الكود إذا كان اسم الكلاس مختلفاً لديكنّ
-    class PocketOptionAPI:
-        def __init__(self, ssid): self.ssid = ssid
-        async def connect(self): return True
-        async def subscribe_all(self, pairs): pass
-        async def listen_ticks(self, callback): pass
-
+# تعريف تطبيق الـ FastAPI الذي يبحث عنه موقع Render
 app = FastAPI()
 
+# تفعيل السماح بالاتصال من أي واجهة (CORS) لربط صفحة HTML بأمان
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -25,52 +17,101 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-ALL_PAIRS = ["EURUSD_otc", "GBPUSD_otc", "USDJPY_otc", "EURGBP_otc", "EURUSD", "GBPUSD"]
+# قائمة بكافة أزواج الـ OTC والفوركس المتاحة للمراقبة الحية في مشروعكنّ
+ALL_PAIRS = [
+    "EURUSD_otc", "GBPUSD_otc", "USDJPY_otc", "EURGBP_otc", "AUDUSD_otc", 
+    "EURUSD", "GBPUSD", "USDJPY"
+]
 
-def save_log(msg):
-    """حفظ سجلات بروتوكول مكتبتكنّ في ملف نصي"""
+def log_to_file(message):
+    """دالة برمجية مخصصة لحفظ كافة سجلات وحزم الاتصال تلقائياً في ملف نصي"""
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
     with open("pocket_project_log.txt", "a", encoding="utf-8") as f:
-        f.write(f"[{timestamp}] {msg}\n")
+        f.write(f"[{timestamp}] {message}\n")
+
+@app.get("/")
+def home():
+    return {"status": "running", "message": "Pocket Option Cloud Server is Active"}
 
 @app.websocket("/ws")
 async def websocket_endpoint(client_ws: WebSocket):
+    # قبول اتصال صفحة الـ HTML بالسيرفر السحابي
     await client_ws.accept()
-    save_log("تم ربط صفحة الويب بالسيرفر السحابي بنجاح [ضوء برتقالي].")
+    log_to_file("تم اتصال صفحة الويب بالسيرفر السحابي بنجاح [تفعيل الضوء البرتقالي].")
     
+    pocket_ws = None
     try:
-        # استقبال الـ SSID من واجهة المستخدم
-        data = await client_ws.receive_text()
-        ssid = json.loads(data).get("ssid")
+        # 1. استقبال الـ SSID القادم من خانة الإدخال في صفحة الـ HTML
+        init_data = await client_ws.receive_text()
+        init_json = json.loads(init_data)
+        ssid = init_json.get("ssid")
         
-        save_log(f"جاري تهيئة الاتصال بالمنصة عبر مكتبتكنّ باستخدام SSID: {ssid[:10]}...")
+        # رابط خادم المنصة الرسمي المشفر والمستخدم في المكتبات غير الرسمية
+        pocket_url = "wss://://pocketoption.com"
+        log_to_file(f"محاولة الاتصال بالمنصة برابط: {pocket_url}")
         
-        # تشغيل الجلسة وبدء الاتصال بالاعتماد الكلي على مكتبتكنّ
-        bot_api = PocketOptionAPI(ssid=ssid)
-        connected = await bot_api.connect()
-        
-        if connected:
-            save_log("نجحت مكتبتكنّ في تجاوز حواجز المنصة وتفعيل الاتصال البيني [ضوء أخضر].")
-            # إرسال إشارة للـ HTML لتشغيل الضوء الأخضر وحالة "متصل"
+        # 2. إنشاء اتصال الويب سوكيت المباشر مع المنصة
+        async with websockets.connect(pocket_url) as pocket_ws:
+            log_to_file("تم الاتصال الفيزيائي بخادم المنصة. جاري إرسال حزم التأسيس...")
+            
+            # إرسال حزمة التأسيس لبروتوكول Socket.IO لفتح القناة
+            await pocket_ws.send("40")
+            
+            # إرسال حزمة المصادقة الجلسية الرسمية المعتمدة على الـ SSID المنسوخ
+            auth_packet = f'42["auth", {{"session": "{ssid}", "isDemo": 1, "uid": 999999, "platform": 1}}]'
+            await pocket_ws.send(auth_packet)
+            log_to_file(f"تم إرسال حزمة المصادقة الجلسية: {auth_packet}")
+            
+            # إرسال إشارة نجاح التوثيق لصفحة الـ HTML لتفعيل الضوء الأخضر وحالة 'متصل'
             await client_ws.send_json({"status": "platform_connected"})
             
-            # الاشتراك في الأزواج عبر مكتبتكنّ
-            await bot_api.subscribe_all(ALL_PAIRS)
-            
-            # دالة استقبال الأسعار من مكتبتكنّ وتمريرها لحظياً لصفحة الويب
-            async def forward_ticks(tick_data):
-                save_log(f"[مكتبتكنّ التقطت سعر]: {tick_data}")
-                await client_ws.send_json({
-                    "status": "tick",
-                    "asset": tick_data.get("asset"),
-                    "price": tick_data.get("price")
-                })
-            
-            # بدء الاستماع اللحظي للأسعار بناءً على الأحداث المعرفة في الكود الخاص بكنّ
-            await bot_api.listen_ticks(callback=forward_ticks)
-            
+            # الاشتراك التلقائي في بث كافة الأزواج والـ OTC لجلب الأسعار لحظة بلحظة
+            for pair in ALL_PAIRS:
+                sub_packet = f'42["changeSymbol", {{"asset": "{pair}", "timeframe": 60}}]'
+                await pocket_ws.send(sub_packet)
+                log_to_file(f"تم إرسال طلب بث السعر اللحظي للزوج: {pair}")
+
+            # دالة موازية لإرسال نبضات القلب (Ping) كل 20 ثانية للحفاظ على استقرار الجلسة ومنع الفصل
+            async def send_heartbeat():
+                while True:
+                    await asyncio.sleep(20)
+                    if pocket_ws.open:
+                        await pocket_ws.send("2")
+                        log_to_file("[إرسال Heartbeat ->] 2")
+
+            asyncio.create_task(send_heartbeat())
+
+            # 3. حلقة الاستماع اللحظية وقراءة سيل الأسعار وتمريرها فوراً لصفحة الـ HTML وحفظها
+            async for raw_message in pocket_ws:
+                # تصفية وحفظ حزم البيانات والأسعار (Tick Data) المبتدئة بـ 42
+                if raw_message.startswith("42"):
+                    log_to_file(f"[حزمة مستلمة من المنصة <-] {raw_message}")
+                    
+                    # محاولة تفكيك حزمة السعر وتمريرها منظمة للجدول
+                    try:
+                        parsed = json.loads(raw_message[2:])
+                        if isinstance(parsed, list) and parsed[0] == "tick":
+                            tick_info = parsed[1]
+                            await client_ws.send_json({
+                                "status": "tick",
+                                "asset": tick_info.get("asset"),
+                                "price": tick_info.get("price")
+                            })
+                            continue
+                    except:
+                        pass
+                    
+                    # تمرير الرسالة الخام للواجهة إذا لم تكن حزمة سعر قياسية
+                    await client_ws.send_text(raw_message)
+                    
+                elif raw_message == "3":
+                    log_to_file("[استقبل رد Heartbeat <-] 3")
+
     except WebSocketDisconnect:
-        save_log("تم فصل اتصال واجهة المستخدم عن السيرفر السحابي.")
+        log_to_file("تم إغلاق اتصال صفحة الويب بالسيرفر السحابي.")
     except Exception as e:
-        save_log(f"خطأ أثناء تشغيل مكتبتكنّ: {str(e)}")
-        await client_ws.send_json({"status": "error", "message": str(e)})
+        log_to_file(f"حدث خطأ غير متوقع في معالجة البروتوكول: {str(e)}")
+        try:
+            await client_ws.send_json({"status": "error", "message": str(e)})
+        except:
+            pass
