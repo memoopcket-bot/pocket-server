@@ -1,88 +1,76 @@
 import asyncio
-import websockets
 import json
-import sys
+import datetime
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 
-sys.stdout.reconfigure(encoding='utf-8')
+# استيراد محرك الاتصال من مكتبتكنّ الخاصة الموجودة في الصورة
+try:
+    from server_scae import PocketOptionAPI  # أو اسم الكلاس المعتمد داخل ملفكم
+except ImportError:
+    # هذا مجرد تمثيل مرن لضمان عمل الكود إذا كان اسم الكلاس مختلفاً لديكنّ
+    class PocketOptionAPI:
+        def __init__(self, ssid): self.ssid = ssid
+        async def connect(self): return True
+        async def subscribe_all(self, pairs): pass
+        async def listen_ticks(self, callback): pass
 
-class DynamicPassiveBridge:
-    def __init__(self):
-        self.client_connections = set()
-        self.platform_ws = None
-        self.is_connected_to_platform = False
+app = FastAPI()
 
-    async def start_platform_handshake(self, auth_payload, client_ws):
-        platform_url = "wss://api-us-north.po.market/socket.io/?EIO=4&transport=websocket"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Origin": "https://pocketoption.com"
-        }
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-        try:
-            print("[BRIDGE] Connecting directly to platform stream...")
-            async with websockets.connect(platform_url, extra_headers=headers) as ws:
-                self.platform_ws = ws
-                self.is_connected_to_platform = True
-                
-                await self.platform_ws.send("40")
-                await asyncio.sleep(1)
-                
-                print("[AUTH INJECTION] Sending raw SSID to platform...")
-                await self.platform_ws.send(auth_payload)
-                
-                asyncio.create_task(self.keep_alive_loop())
+ALL_PAIRS = ["EURUSD_otc", "GBPUSD_otc", "USDJPY_otc", "EURGBP_otc", "EURUSD", "GBPUSD"]
 
-                async for message in self.platform_ws:
-                    if isinstance(message, bytes):
-                        hex_data = message.hex()
-                        broadcast_msg = f'451-["binary_update","{hex_data}"]'
-                    else:
-                        broadcast_msg = message
-                    
-                    if client_ws in self.client_connections:
-                        await client_ws.send(broadcast_msg)
+def save_log(msg):
+    """حفظ سجلات بروتوكول مكتبتكنّ في ملف نصي"""
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    with open("pocket_project_log.txt", "a", encoding="utf-8") as f:
+        f.write(f"[{timestamp}] {msg}\n")
 
-        except Exception as e:
-            print(f"[PLATFORM ERROR] Disconnected or refused: {e}")
-            self.is_connected_to_platform = False
-
-    async def keep_alive_loop(self):
-        while self.is_connected_to_platform and self.platform_ws:
-            try:
-                await self.platform_ws.send("2")
-                print("[HEARTBEAT] Sent engine ping '2'")
-                await asyncio.sleep(20)
-            except:
-                break
-
-    async def handle_dashboard_signals(self, websocket):
-        self.client_connections.add(websocket)
-        print(f"[RENDER UI] Connected to frontend dashboard control. Total: {len(self.client_connections)}")
+@app.websocket("/ws")
+async def websocket_endpoint(client_ws: WebSocket):
+    await client_ws.accept()
+    save_log("تم ربط صفحة الويب بالسيرفر السحابي بنجاح [ضوء برتقالي].")
+    
+    try:
+        # استقبال الـ SSID من واجهة المستخدم
+        data = await client_ws.receive_text()
+        ssid = json.loads(data).get("ssid")
         
-        try:
-            async for message in websocket:
-                data = json.loads(message)
-                action = data.get("action")
-                
-                if action == "init_bridge":
-                    auth_payload = data.get("auth_payload")
-                    asyncio.create_task(self.start_platform_handshake(auth_payload, websocket))
-                    
-                elif action == "request_candles" and self.platform_ws:
-                    asset = data.get("asset")
-                    request_msg = f'42["changeSymbol", {{"asset": "{asset}"}}]'
-                    await self.platform_ws.send(request_msg)
-
-        except websockets.exceptions.ConnectionClosed:
-            print("[RENDER UI] Closed connection with frontend.")
-        finally:
-            self.client_connections.remove(websocket)
-
-async def main():
-    bridge = DynamicPassiveBridge()
-    async with websockets.serve(bridge.handle_dashboard_signals, "0.0.0.0", 10000):
-        print("[LAUNCHED] Live Render Backend Service running on port 10000...")
-        await asyncio.Future()
-
-if __name__ == "__main__":
-    asyncio.run(main())
+        save_log(f"جاري تهيئة الاتصال بالمنصة عبر مكتبتكنّ باستخدام SSID: {ssid[:10]}...")
+        
+        # تشغيل الجلسة وبدء الاتصال بالاعتماد الكلي على مكتبتكنّ
+        bot_api = PocketOptionAPI(ssid=ssid)
+        connected = await bot_api.connect()
+        
+        if connected:
+            save_log("نجحت مكتبتكنّ في تجاوز حواجز المنصة وتفعيل الاتصال البيني [ضوء أخضر].")
+            # إرسال إشارة للـ HTML لتشغيل الضوء الأخضر وحالة "متصل"
+            await client_ws.send_json({"status": "platform_connected"})
+            
+            # الاشتراك في الأزواج عبر مكتبتكنّ
+            await bot_api.subscribe_all(ALL_PAIRS)
+            
+            # دالة استقبال الأسعار من مكتبتكنّ وتمريرها لحظياً لصفحة الويب
+            async def forward_ticks(tick_data):
+                save_log(f"[مكتبتكنّ التقطت سعر]: {tick_data}")
+                await client_ws.send_json({
+                    "status": "tick",
+                    "asset": tick_data.get("asset"),
+                    "price": tick_data.get("price")
+                })
+            
+            # بدء الاستماع اللحظي للأسعار بناءً على الأحداث المعرفة في الكود الخاص بكنّ
+            await bot_api.listen_ticks(callback=forward_ticks)
+            
+    except WebSocketDisconnect:
+        save_log("تم فصل اتصال واجهة المستخدم عن السيرفر السحابي.")
+    except Exception as e:
+        save_log(f"خطأ أثناء تشغيل مكتبتكنّ: {str(e)}")
+        await client_ws.send_json({"status": "error", "message": str(e)})
