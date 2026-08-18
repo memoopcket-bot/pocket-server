@@ -5,193 +5,40 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Passive Bridge - Pocket Option 2026</title>
     <style>
-        :root {
-            --bg-main: #121620;
-            --bg-card: #1a202e;
-            --primary: #00b074;
-            --danger: #ff4a4a;
-            --text: #ffffff;
-            --text-muted: #8a96a3;
-            --border: #263147;
-            --accent: #1e70ff;
-        }
-
-        body {
-            background-color: var(--bg-main);
-            color: var(--text);
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 15px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .container {
-            width: 100%;
-            max-width: 480px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        .card {
-            background-color: var(--bg-card);
-            border-radius: 12px;
-            padding: 15px;
-            border: 1px solid var(--border);
-        }
-
-        .status-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 15px;
-            font-size: 14px;
-        }
-
-        .status-badge {
-            color: var(--danger);
-            font-weight: bold;
-        }
-
-        .status-badge.connected {
-            color: var(--primary);
-        }
-
-        .btn-group {
-            display: flex;
-            gap: 10px;
-        }
-
-        .btn {
-            flex: 1;
-            padding: 12px;
-            border-radius: 8px;
-            border: none;
-            font-weight: bold;
-            cursor: pointer;
-            font-size: 14px;
-            transition: opacity 0.2s;
-        }
-
+        :root { --bg-main: #121620; --bg-card: #1a202e; --primary: #00b074; --danger: #ff4a4a; --text: #ffffff; --text-muted: #8a96a3; --border: #263147; --accent: #1e70ff; }
+        body { background-color: var(--bg-main); color: var(--text); font-family: 'Segoe UI', sans-serif; margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 15px; }
+        .card { background-color: var(--bg-card); border-radius: 12px; padding: 15px; border: 1px solid var(--border); }
+        .status-row { display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 14px; }
+        .status-badge { color: var(--danger); font-weight: bold; }
+        .status-badge.connected { color: var(--primary); }
+        .btn-group { display: flex; gap: 10px; }
+        .btn { flex: 1; padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; font-size: 14px; }
         .btn-primary { background-color: var(--accent); color: white; }
         .btn-danger { background-color: var(--danger); color: white; }
         .btn-success { background-color: var(--primary); color: white; width: 100%; margin-top: 5px; }
-        .btn:hover { opacity: 0.9; }
-
-        .field-group {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            font-size: 14px;
-            margin-bottom: 12px;
-        }
-
-        .field-group label {
-            color: var(--text-muted);
-            font-weight: 500;
-        }
-
-        .select-row {
-            display: flex;
-            justify-content: space-between;
-            gap: 15px;
-            margin-bottom: 5px;
-        }
-
-        .select-field {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-            font-size: 14px;
-        }
-
-        .select-field label {
-            color: var(--text-muted);
-        }
-
-        select, input, textarea {
-            background-color: var(--bg-main);
-            border: 1px solid var(--border);
-            color: white;
-            padding: 11px;
-            border-radius: 6px;
-            outline: none;
-            box-sizing: border-box;
-            width: 100%;
-            font-family: inherit;
-        }
-
-        textarea {
-            resize: vertical;
-            height: 65px;
-            font-size: 12px;
-        }
-
-        .table-title {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            font-size: 15px;
-            font-weight: bold;
-            margin-bottom: 12px;
-        }
-
-        .grid-header, .grid-row {
-            display: grid;
-            grid-template-columns: 2fr 2fr 1fr;
-            padding: 10px 5px;
-            font-size: 13px;
-        }
-
-        .grid-header {
-            color: var(--text-muted);
-            border-bottom: 1px solid var(--border);
-        }
-
-        .grid-row {
-            border-bottom: 1px solid var(--border);
-        }
-
-        .log-card {
-            background-color: #0b0e14;
-            border-radius: 12px;
-            padding: 15px;
-            border: 1px solid var(--border);
-        }
-
-        .log-title {
-            font-size: 14px;
-            font-weight: bold;
-            margin-bottom: 10px;
-            color: #d1d5db;
-        }
-
-        .log-stream {
-            height: 180px;
-            overflow-y: auto;
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 11px;
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-
-        .log-in { color: #38bdf8; }
-        .log-out { color: #facc15; }
-        .log-sys { color: #a78bfa; }
-        .log-err { color: var(--danger); }
+        .field-group { display: flex; flex-direction: column; gap: 6px; font-size: 14px; margin-bottom: 12px; }
+        .field-group label { color: var(--text-muted); }
+        .select-row { display: flex; justify-content: space-between; gap: 15px; margin-bottom: 5px; }
+        .select-field { flex: 1; display: flex; flex-direction: column; gap: 5px; font-size: 14px; }
+        select, input, textarea { background-color: var(--bg-main); border: 1px solid var(--border); color: white; padding: 11px; border-radius: 6px; outline: none; box-sizing: border-box; width: 100%; }
+        textarea { resize: vertical; height: 65px; font-size: 12px; }
+        .table-title { font-size: 15px; font-weight: bold; margin-bottom: 12px; }
+        .grid-header, .grid-row { display: grid; grid-template-columns: 2fr 2fr 1fr; padding: 10px 5px; font-size: 13px; }
+        .grid-header { color: var(--text-muted); border-bottom: 1px solid var(--border); }
+        .grid-row { border-bottom: 1px solid var(--border); }
+        .log-card { background-color: #0b0e14; border-radius: 12px; padding: 15px; border: 1px solid var(--border); }
+        .log-title { font-size: 14px; font-weight: bold; margin-bottom: 10px; color: #d1d5db; }
+        .log-stream { height: 180px; overflow-y: auto; font-family: monospace; font-size: 11px; display: flex; flex-direction: column; gap: 4px; }
+        .log-in { color: #38bdf8; } .log-out { color: #facc15; } .log-sys { color: #a78bfa; } .log-err { color: var(--danger); }
     </style>
 </head>
 <body>
-
 <div class="container">
-    <!-- كرت التوثيق وجلسة التداول الديناميكية -->
     <div class="card">
         <div class="field-group">
-            <label for="session-input">جلسة التداول الحية (Session / Cookies Payload)</label>
-            <textarea id="session-input" placeholder="ألصق الـ Session البشري هنا (يبدأ بـ a:4:{s:10:... )"></textarea>
+            <label>جلسة التداول الحية (Session Payload)</label>
+            <textarea id="session-input" placeholder="ألصق الـ Session البشري هنا..."></textarea>
         </div>
         <div class="status-row">
             <div>الرصيد المحسوب: <span style="color:var(--primary); font-weight:bold;">$0.00</span></div>
@@ -202,193 +49,89 @@
             <button class="btn btn-danger" onclick="stopTunnel()">قطع الاتصال</button>
         </div>
     </div>
-
-    <!-- كرت خيارات الأصول واختيار العملات -->
     <div class="card">
         <div class="select-row">
-            <div class="select-field">
-                <label for="asset-select">الأصل أو زوج العملة</label>
-                <select id="asset-select">
-                    <option value="EURUSD">EURUSD (عالمي)</option>
-                    <option value="AUDCAD_otc">AUDCAD_otc</option>
-                    <option value="EURUSD_otc">EURUSD_otc</option>
-                </select>
+            <div class="select-field"><label>الأصل أو زوج العملة</label>
+                <select id="asset-select"><option value="EURUSD">EURUSD (عالمي)</option><option value="AUDCAD_otc">AUDCAD_otc</option><option value="EURUSD_otc">EURUSD_otc</option></select>
             </div>
-            <div class="select-field">
-                <label for="candles-count">الشموع المطلوبة</label>
-                <input type="number" id="candles-count" value="50" min="1" max="150">
-            </div>
+            <div class="select-field"><label>الشموع المطلوبة</label><input type="number" id="candles-count" value="50" min="1" max="150"></div>
         </div>
         <button class="btn btn-success" onclick="triggerSubscription()">جلب وفحص الشموع اللحظية</button>
     </div>
-
-    <!-- كرت جداول البث المستلمة -->
     <div class="card">
         <div class="table-title">📊 جداول البث المباشر المستلمة</div>
-        <div class="grid-header">
-            <div>الأصل / الزوج</div>
-            <div>السعر اللحظي ثنائي</div>
-            <div>حالة النفق</div>
-        </div>
-        <div id="market-rows">
-            <div class="grid-row" style="color: var(--text-muted); text-align: center; grid-template-columns: 1fr;">
-                في انتظار إدخال الجلسة وإطلاق الاتصال المباشر...
-            </div>
-        </div>
+        <div class="grid-header"><div>الأصل / الزوج</div><div>السعر اللحظي ثنائي</div><div>حالة النفق</div></div>
+        <div id="market-rows"><div class="grid-row" style="color: var(--text-muted); text-align: center; grid-template-columns: 1fr;">في انتظار إدخال الجلسة وإطلاق الاتصال المباشر...</div></div>
     </div>
-
-    <!-- كرت سجل محرك التمويه السفلي المطابق تماماً للصورة -->
-    <div class="log-card">
-        <div class="log-title">📋 سجل محرك التمويه والكاشف اللحظي:</div>
-        <div id="log-stream" class="log-stream"></div>
-    </div>
+    <div class="log-card"><div class="log-title">📋 سجل محرك التمويه والكاشف اللحظي:</div><div id="log-stream" class="log-stream"></div></div>
 </div>
 <script>
-    let platformSocket = null;
-    let renderSocket = null;
+    let platformSocket = null; let renderSocket = null;
     const logStream = document.getElementById("log-stream");
     const statusBadge = document.getElementById("connection-status");
     const sessionInput = document.getElementById("session-input");
 
     function writeLog(message, direction = "sys") {
-        const time = new Date().toTimeString().split(' ');
-        const logLine = document.createElement("div");
-        logLine.className = `log-${direction}`;
-        
-        if (direction === "in") logLine.textContent = `[${time[0]}] 📥 [وارد من المنصة] : ${message}`;
-        else if (direction === "out") logLine.textContent = `[${time[0]}] 📤 [صادر للمنصة] : ${message}`;
-        else if (direction === "err") logLine.textContent = `[${time[0]}] 🚨 [خطأ] : ${message}`;
-        else logLine.textContent = `[${time[0]}] ⚙️ [نظام] : ${message}`;
-        
-        logStream.appendChild(logLine);
-        logStream.scrollTop = logStream.scrollHeight;
+        const time = new Date().toTimeString().split(' ')[0];
+        const logLine = document.createElement("div"); logLine.className = `log-${direction}`;
+        if (direction === "in") logLine.textContent = `[${time}] 📥 [وارد] : ${message}`;
+        else if (direction === "out") logLine.textContent = `[${time}] 📤 [صادر] : ${message}`;
+        else if (direction === "err") logLine.textContent = `[${time}] 🚨 [خطأ] : ${message}`;
+        else logLine.textContent = `[${time}] ⚙️ [نظام] : ${message}`;
+        logStream.appendChild(logLine); logStream.scrollTop = logStream.scrollHeight;
     }
 
     function startTunnel() {
         const sessionPayload = sessionInput.value.trim();
+        if (!sessionPayload) { writeLog("برجاء لصق الـ Session أولاً.", "err"); return; }
+        writeLog("جاري استدعاء نفق التمويه وربط الخادم سحابياً...", "sys");
         
-        // الحالات الحرجة: التحقق من وجود النص قبل فتح النفق لمنع الانهيار
-        if (!sessionPayload) {
-            writeLog("فشل إطلاق النفق: خانة جلسة التداول فارغة! يرجى لصق الـ Session أولاً.", "err");
-            return;
-        }
-
-        writeLog("جاري استدعاء نفق التمويه وربط الخادم المزدوج سحابياً...", "sys");
-        
-        // الاتصال التلقائي بسيرفر Render المزدوج عبر بروتوكول الـ WebSocket الآمن
-        renderSocket = new WebSocket("wss://://onrender.com"); 
+        // الربط المباشر بسيرفر Render المستقر
+        renderSocket = new WebSocket("wss://://onrender.com");
         renderSocket.binaryType = "arraybuffer";
         
-        renderSocket.onopen = () => {
-            writeLog("تم ربط نفق الباكيند الصامت (Render) بنجاح فوري.", "sys");
-            connectToPlatform(sessionPayload);
-        };
-        
-        renderSocket.onerror = () => {
-            writeLog("فشل ربط نفق Render. تأكد من استقرار السيرفر سحابياً.", "err");
-        };
+        renderSocket.onopen = () => { writeLog("تم ربط نفق الباكيند (Render) بنجاح فوري.", "sys"); connectToPlatform(sessionPayload); };
+        renderSocket.onerror = () => writeLog("فشل ربط نفق Render العكسي.", "err");
     }
 
     function connectToPlatform(sessionData) {
-        // النطاق الجغرافي الديناميكي المكتشف لعام 2026
         const geoUrl = "wss://api-us-north.po.market/socket.io/?EIO=4&transport=websocket";
-        platformSocket = new WebSocket(geoUrl);
-        platformSocket.binaryType = "arraybuffer";
-
-        platformSocket.onopen = () => {
-            statusBadge.textContent = "متصل بشري مباشر";
-            statusBadge.className = "status-badge connected";
-            writeLog("تم فتح مجرى الاتصال الحي بنجاح مع خوادم المنصة.", "sys");
-        };
-
+        platformSocket = new WebSocket(geoUrl); platformSocket.binaryType = "arraybuffer";
+        platformSocket.onopen = () => { statusBadge.textContent = "متصل بشري مباشر"; statusBadge.className = "status-badge connected"; writeLog("تم فتح مجرى الاتصال الحي بنجاح.", "sys"); };
         platformSocket.onmessage = (event) => {
-            // كسر التشفير الثنائي: تمرير البايتات فوراً لـ Render دون تفكيكها لتجنب ثقل الواجهة
             if (event.data instanceof ArrayBuffer) {
-                writeLog(`حزمة بايتات ثنائية مستلمة (Binary Frame) بحجم ${event.data.byteLength} بايت`, "in");
-                if (renderSocket && renderSocket.readyState === WebSocket.OPEN) {
-                    renderSocket.send(event.data);
-                }
+                writeLog(`حزمة بايتات ثنائية مستلمة بحجم ${event.data.byteLength} بايت`, "in");
+                if (renderSocket && renderSocket.readyState === WebSocket.OPEN) renderSocket.send(event.data);
                 return;
             }
-
-            const txt = event.data;
-            writeLog(txt, "in");
-            
-            // تمرير الرسالة النصية للباكيند لتوثيقها في عداد الـ Auditor
-            if (renderSocket && renderSocket.readyState === WebSocket.OPEN) {
-                renderSocket.send(txt);
-            }
-
-            // سحق الخطأ 41: الانتظار وعدم التسرع في التوثيق عند استلام حزمة الترحيب 0
-            if (txt.startsWith("0{")) {
-                writeLog("تم استقبال حزمة الترحيب 0. بانتظار فتح الممر الأمني من الخادم...", "sys");
-                return; 
-            }
-
-            // الاستجابة الصارمة والدقيقة فور استلام حزمة التثبيت 40
+            const txt = event.data; writeLog(txt, "in");
+            if (renderSocket && renderSocket.readyState === WebSocket.OPEN) renderSocket.send(txt);
+            if (txt.startsWith("0{")) return;
             if (txt === "40") {
-                writeLog("تم رصد حزمة التثبيت 40 بنجاح. الممر آمن، إطلاق قذيفة التوثيق الديناميكية...", "sys");
-                
-                // صياغة حزمة التوثيق بشكل ديناميكي باستخدام الـ Session المكتوب في الخانة
+                writeLog("تم رصد الحزمة 40. إطلاق قذيفة التوثيق البشري...", "sys");
                 const authPacket = `42["auth",{"session":${JSON.stringify(sessionData)}}]`;
-                platformSocket.send(authPacket);
-                writeLog("تم إرسال حزمة التوثيق الديناميكية للـ Session بنجاح.", "out");
+                platformSocket.send(authPacket); writeLog("تم إرسال حزمة التوثيق الديناميكية.", "out");
             }
-
-            // الحفاظ على النبض الحي متزامناً لمنع الطرد أو انتهاء الجلسة
-            if (txt === "2") {
-                platformSocket.send("3");
-                writeLog("تلبية نبض الحفاظ على المجرى حياً (Pong 3)", "out");
-            }
+            if (txt === "2") { platformSocket.send("3"); writeLog("نبض دوري متزامن (Pong 3)", "out"); }
         };
-
-        platformSocket.onclose = (e) => {
-            writeLog(`قطع الاتصال التلقائي من خادم المنصة. كود الفصل: ${e.code}`, "err");
-            statusBadge.textContent = "غير متصل";
-            statusBadge.className = "status-badge";
-        };
+        platformSocket.onclose = (e) => { writeLog(`قطع الاتصال التلقائي من المنصة. كود: ${e.code}`, "err"); statusBadge.textContent = "غير متصل"; statusBadge.className = "status-badge"; };
     }
 
     function triggerSubscription() {
         const selectedAsset = document.getElementById("asset-select").value;
-        
-        if (!platformSocket || platformSocket.readyState !== WebSocket.OPEN) {
-            writeLog("لا يمكن إرسال طلب المشاهدة البث؛ الاتصال البشري غير نشط حالياً.", "err");
-            return;
-        }
-
-        writeLog(`إرسال تتابع أوامر تغيير الأصول والاشتراك للزوج: ${selectedAsset}`, "sys");
-        
-        // إطلاق حزمة الأوامر السبعة المتتالية لعام 2026 بفارق زمني مدروس
+        if (!platformSocket || platformSocket.readyState !== WebSocket.OPEN) { writeLog("الاتصال البشري غير نشط.", "err"); return; }
+        writeLog(`إرسال أوامر الاشتراك للزوج: ${selectedAsset}`, "sys");
         const changePacket = `42["changeSymbol",{"asset":"${selectedAsset}","period":60}]`;
         const subPacket = `42["subFor","${selectedAsset}"]`;
-        
-        platformSocket.send(changePacket);
-        writeLog(changePacket, "out");
-        
-        setTimeout(() => {
-            platformSocket.send(subPacket);
-            writeLog(subPacket, "out");
-            updateUIList(selectedAsset);
-        }, 150);
+        platformSocket.send(changePacket); writeLog(changePacket, "out");
+        setTimeout(() => { platformSocket.send(subPacket); writeLog(subPacket, "out"); updateUIList(selectedAsset); }, 150);
     }
 
     function updateUIList(asset) {
-        const rowContainer = document.getElementById("market-rows");
-        rowContainer.innerHTML = `
-            <div class="grid-row">
-                <div style="font-weight:bold; color:#1e70ff;">${asset}</div>
-                <div id="live-price" style="font-family:monospace; color:var(--primary); font-weight:bold;">...جاري السحب ثنائياً</div>
-                <div style="color:var(--primary); font-weight:bold;">نشط 🟢</div>
-            </div>
-        `;
+        document.getElementById("market-rows").innerHTML = `<div class="grid-row"><div style="font-weight:bold; color:#1e70ff;">${asset}</div><div id="live-price" style="font-family:monospace; color:var(--primary); font-weight:bold;">...جاري السحب ثنائياً</div><div style="color:var(--primary); font-weight:bold;">نشط 🟢</div></div>`;
     }
 
-    function stopTunnel() {
-        if (platformSocket) platformSocket.close();
-        if (renderSocket) renderSocket.close();
-        writeLog("تم فصل وإيقاف نفق الـ Passive Bridge بالكامل بطلب المستخدم.", "sys");
-    }
+    function stopTunnel() { if (platformSocket) platformSocket.close(); if (renderSocket) renderSocket.close(); writeLog("تم فصل وإيقاف نفق الـ Passive Bridge بالكامل.", "sys"); }
 </script>
 </body>
 </html>
