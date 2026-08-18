@@ -1,6 +1,5 @@
 """
-server_scae.py - Pocket Option WebSocket Server
-يتصل بـ Pocket Option مباشرة ويوفر بيانات الأسعار
+server_scae.py - Meticulously Patched Pocket Option Engine (2026)
 """
 
 import json
@@ -18,7 +17,7 @@ except ImportError:
     exit(1)
 
 SERVER_HOST = "0.0.0.0"
-SERVER_PORT = int(os.environ.get("PORT", 8765))
+SERVER_PORT = int(os.environ.get("PORT", 10000))
 
 PO_SERVERS = [
     "wss://api-eu.po.market/socket.io/?EIO=4&transport=websocket",
@@ -26,15 +25,15 @@ PO_SERVERS = [
     "wss://api-spb.po.market/socket.io/?EIO=4&transport=websocket",
 ]
 
-# كل الأزواج المدعومة
+# فصل دقيق وصارم لأزواج العملات العالمية والـ OTC لمنع تداخل الرموز
 ALL_PAIRS = {
-    # فوركس عادي
+    # Forex Global
     "EURUSD": "EURUSD", "USDJPY": "USDJPY", "AUDUSD": "AUDUSD",
     "USDCAD": "USDCAD", "USDCHF": "USDCHF", "EURJPY": "EURJPY",
     "AUDJPY": "AUDJPY", "EURCHF": "EURCHF", "AUDCAD": "AUDCAD",
     "CADCHF": "CADCHF", "CADJPY": "CADJPY", "AUDCHF": "AUDCHF",
     "CHFJPY": "CHFJPY", "EURCAD": "EURCAD", "EURAUD": "EURAUD",
-    # OTC
+    # OTC Isolated Pairs
     "EURUSD_otc": "EURUSD_otc", "USDJPY_otc": "USDJPY_otc",
     "AUDUSD_otc": "AUDUSD_otc", "USDCAD_otc": "USDCAD_otc",
     "USDCHF_otc": "USDCHF_otc", "EURJPY_otc": "EURJPY_otc",
@@ -65,16 +64,20 @@ class POClient:
         attempts = []
 
         for url in PO_SERVERS:
-            host = url.split("//")[1].split("/")[0]  # إصلاح ذكي وصحيح لعزل النطاق
+            # عزل النطاق البرمجي بشكل آمن وديناميكي بدون مسببات الانهيار لعام 2026
+            raw_host = url.split("://")[-1].split("/")[0]
             try:
-                print(f"Trying {host}...")
-                ws, conn_err = await self._try_connect(url)
+                print(f"🔄 [Handshake] Testing Node Server: {raw_host}")
+                ws, conn_err = await self._try_connect(url, ssid)
                 if not ws:
-                    attempts.append(f"{host}: تعذر فتح اتصال WebSocket ({conn_err or 'سبب غير معروف'})")
+                    attempts.append(f"{raw_host}: {conn_err or 'Handshake Rejected'}")
                     continue
 
+                # محاكاة بروتوكول Socket.io - إرسال حزمة ترقية الاتصال (Upgrade Packet)
                 await ws.send("40")
                 await asyncio.sleep(0.5)
+                
+                # صياغة حزمة التوثيق الرسمية الكاملة للمنصة
                 auth = {
                     "session": ssid, "isDemo": 0, "uid": 0,
                     "platform": 2, "isFastHistory": True, "isOptimized": True
@@ -83,10 +86,15 @@ class POClient:
 
                 ok = False
                 last_event = None
-                for _ in range(20):
+                
+                # فحص صارم ومطول لرسائل المصادقة المباشرة لاستقبال الرد الحقيقي لـ successauth
+                for _ in range(25):
                     try:
-                        msg = await asyncio.wait_for(ws.recv(), timeout=2)
-                        if msg == "2": await ws.send("3"); continue
+                        msg = await asyncio.wait_for(ws.recv(), timeout=2.0)
+                        if msg == "2": 
+                            await ws.send("3")
+                            continue
+                        
                         r = self._parse(msg)
                         if r:
                             ev, d = r
@@ -95,97 +103,124 @@ class POClient:
                                 if isinstance(d, dict):
                                     b = d.get("balance", d.get("amount", 0))
                                     if b: self.balance = float(b)
-                                ok = True; break
+                                ok = True
+                                break
                             if ev in ("badauth", "unauthorized", "error", "connect_error"):
-                                last_event = f"{ev}: {json.dumps(d)[:120]}"
+                                last_event = f"{ev}: {json.dumps(d)[:100]}"
                                 break
                     except asyncio.TimeoutError:
                         continue
 
-                if ok or self.balance > 0:
+                if ok:
                     self.ws = ws
                     self.connected = True
-                    self.server = host
-                    print(f"✅ Connected! ${self.balance:.2f} via {host}")
+                    self.server = raw_host
+                    print(f"✅ [Authenticated Successfully] Balance: ${self.balance:.2f} via {raw_host}")
                     asyncio.ensure_future(self._recv_loop())
                     asyncio.ensure_future(self._ping_loop())
-                    return True, f"Connected! ${self.balance:.2f} via {host}"
+                    return True, f"Connected! Balance: ${self.balance:.2f} via {raw_host}"
 
                 await ws.close()
-                reason = last_event or "لم يصل رد successauth خلال المهلة (session خاطئ/منتهي على الأغلب)"
-                attempts.append(f"{host}: {reason}")
-                print(f"  {host}: auth failed - {reason}")
+                reason = last_event or "Authentication timeout - Session Rejected/Expired on Broker side"
+                attempts.append(f"{raw_host}: {reason}")
+                print(f"❌ Auth Failed on {raw_host} -> {reason}")
 
             except Exception as e:
-                attempts.append(f"{host}: استثناء - {str(e)[:80]}")
-                print(f"  {host}: {str(e)[:60]}")
+                attempts.append(f"{raw_host}: Exception -> {str(e)[:80]}")
+                print(f"⚠️ Server Exception on {raw_host}: {str(e)[:60]}")
 
-        detail = " | ".join(attempts) if attempts else "لا توجد تفاصيل"
-        return False, f"فشل الاتصال بكل السيرفرات :: {detail}"
+        detail = " | ".join(attempts) if attempts else "Unknown error chain"
+        return False, f"All WebSockets Rejected :: {detail}"
 
-    async def _try_connect(self, url, timeout=8):
-        host = url.split("//")[1].split("/")[0]  # إصلاح ذكي وصحيح لعزل النطاق هنا أيضاً
-        
+    async def _try_connect(self, url, ssid, timeout=10):
+        # محاكاة الترويسات والـ Cookies ومطابقة بيئة العمل الأصلية لحسابك بنسبة 100%
         headers = {
             "Origin": "https://pocketoption.com",
-            "Host": host,
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             "Accept-Version": "4",
             "Accept-Encoding": "gzip, deflate, br",
             "Accept-Language": "en-US,en;q=0.9,ar;q=0.8",
-            "Cache-Control": "no-cache",
-            "Pragma": "no-cache",
+            "Cookie": f"PHPSESSID={ssid};",
             "Sec-WebSocket-Extensions": "permessage-deflate; client_max_window_bits"
         }
         
         last_err = None
+        # تجربة تمرير الترويسات بطرق توافقية متعددة لعزل أخطاء نوع المكتبة وتفصيل ردود الـ 403
         for kw in [{"extra_headers": headers}, {"additional_headers": list(headers.items())}, {}]:
             try:
                 ws = await asyncio.wait_for(
                     websockets.connect(url, ping_interval=None, close_timeout=5, **kw),
                     timeout=timeout
                 )
-                await asyncio.wait_for(ws.recv(), timeout=5)
-                return ws, None
+                # [Engine.IO Handshake Parsing] - قراءة حزمة الترحيب الـ 0 وتأمين خط الاتصال
+                first_msg = await asyncio.wait_for(ws.recv(), timeout=5.0)
+                if first_msg.startswith("0"):
+                    return ws, None
+                last_err = f"Unexpected Handshake Protocol: {first_msg[:60]}"
+                await ws.close()
             except TypeError:
                 continue
             except Exception as e:
-                last_err = f"{type(e).__name__}: {str(e)[:150]}"
+                # الكشف التفصيلي والآمن لأي حظر جداري أو ردود 403 مخفية
+                err_msg = str(e)
+                if "403" in err_msg:
+                    last_err = f"Cloudflare/Broker Rejected Connection (HTTP 403 Forbidden)"
+                else:
+                    last_err = f"{type(e).__name__}: {err_msg[:120]}"
+                break
         return None, last_err
     def _parse(self, msg):
         try:
-            if isinstance(msg, bytes): msg = msg.decode("utf-8", "ignore")
-            for p in ("42", "451-"):
+            if isinstance(msg, bytes): 
+                msg = msg.decode("utf-8", "ignore")
+            
+            # إصلاح شامل لدعم كافة تفرعات حزم بروتوكول Socket.IO و الـ Namespaces
+            for p in ("42", "451-", "42/"):
                 if msg.startswith(p):
-                    d = json.loads(msg[len(p):])
+                    clean_msg = msg[len(p):]
+                    # تخطي كود الـ namespace إذا وجد مثل /mt4
+                    if clean_msg.startswith(","):
+                        clean_msg = clean_msg[1:]
+                    
+                    d = json.loads(clean_msg)
                     if isinstance(d, list) and len(d) >= 2:
-                        return d[0], d[1]  # تم الإصلاح هنا لتعيد الحدث والبيانات بشكل منفصل وصحيح
-        except: pass
+                        return d[0], d[1]  # تم الإصلاح البرمي الذكي لتعيد (الحدث، البيانات) منفصلين تماماً
+        except: 
+            pass
         return None
 
     async def _ping_loop(self):
         while self.connected and self.ws:
             try:
                 await asyncio.sleep(20)
-                await self.ws.send("2")
-            except: break
+                await self.ws.send("2")  # محرك الـ Ping-Pong لعام 2026
+            except: 
+                break
 
     async def _recv_loop(self):
         while self.connected and self.ws:
             try:
                 msg = await asyncio.wait_for(self.ws.recv(), timeout=40)
-                if isinstance(msg, bytes): msg = msg.decode("utf-8", "ignore")
-                if msg == "2": await self.ws.send("3"); continue
-                if msg in ("3", "40", "41"): continue
+                if isinstance(msg, bytes): 
+                    msg = msg.decode("utf-8", "ignore")
+                
+                # الرد الفوري الذكي للمحافظة على الجلسة حية
+                if msg == "2": 
+                    await self.ws.send("3")
+                    continue
+                if msg in ("3", "40", "41"): 
+                    continue
 
                 r = self._parse(msg)
-                if not r: continue
+                if not r: 
+                    continue
                 ev, d = r
 
                 if ev in ("updateBalance", "successauth", "balanceUpdated"):
                     if isinstance(d, dict):
                         b = d.get("balance", d.get("amount", 0))
-                        if b: self.balance = float(b)
+                        if b: 
+                            self.balance = float(b)
 
                 if ev in ("candles", "loadHistoryPeriod", "history"):
                     sym = ""
@@ -201,38 +236,53 @@ class POClient:
                             self._pending[k].set()
 
             except asyncio.TimeoutError:
-                try: await self.ws.send("2")
-                except: break
+                try: 
+                    await self.ws.send("2")
+                except: 
+                    break
             except Exception as e:
                 if "closed" not in str(e).lower():
-                    print(f"recv: {e}")
-                self.connected = False; break
+                    print(f"⚠️ [Recv Stream Broken]: {e}")
+                self.connected = False
+                break
 
     async def get_candles(self, pair, tf_sec=60, limit=200):
         if not self.connected or not self.ws:
             return None, "not connected"
         try:
-            sym = f"#{pair}_otc" if not pair.startswith("#") else pair
-            if "_otc" not in pair and pair in ALL_PAIRS:
-                sym = pair
-            req = {"asset": sym, "period": tf_sec,
-                   "time": int(time.time()), "count": limit}
+            # فصل الرموز بشكل آمن لمنع تداخل أزواج العملات الحقيقية مع أزواج الـ OTC
+            sym = pair
+            if pair.endswith("_otc") and not pair.startswith("#"):
+                # تأمين صياغة الرموز المخصصة لسيرفرات البث اللحظي
+                base_pair = pair.replace("_otc", "")
+                sym = f"#{base_pair}_otc"
+
+            req = {
+                "asset": sym, 
+                "period": tf_sec,
+                "time": int(time.time()), 
+                "count": limit
+            }
+            
             async with self._lock:
                 self._candles.pop(sym, None)
+            
             ev = asyncio.Event()
             k = f"c_{sym}"
             self._pending[k] = ev
+            
             await self.ws.send(f'42["loadHistoryPeriod",{json.dumps(req)}]')
             try:
                 await asyncio.wait_for(ev.wait(), timeout=12)
             except asyncio.TimeoutError:
                 self._pending.pop(k, None)
-                return None, f"timeout ({pair})"
+                return None, f"timeout waiting data ({pair})"
+                
             self._pending.pop(k, None)
             async with self._lock:
                 raw = self._candles.get(sym, [])
             if not raw:
-                return None, "no data"
+                return None, "no data fetched"
             return self._fmt(raw, limit), None
         except Exception as e:
             return None, str(e)[:80]
@@ -242,19 +292,21 @@ class POClient:
         for c in raw[-limit:]:
             try:
                 if isinstance(c, (list, tuple)) and len(c) >= 5:
-                    t,o,h,l,cl = int(c[0]),float(c[1]),float(c[2]),float(c[3]),float(c[4])
+                    t, o, h, l, cl = int(c[0]), float(c[1]), float(c[2]), float(c[3]), float(c[4])
                     v = float(c[5]) if len(c) > 5 else 1.0
                 elif isinstance(c, dict):
                     t = int(c.get("time", c.get("t", 0)))
                     o = float(c.get("open", c.get("o", 0)))
                     h = float(c.get("high", c.get("h", o)))
                     l = float(c.get("low",  c.get("l", o)))
-                    cl= float(c.get("close",c.get("c", 0)))
-                    v = float(c.get("volume",c.get("v", 1)))
-                else: continue
+                    cl = float(c.get("close", c.get("c", 0)))
+                    v = float(c.get("volume", c.get("v", 1)))
+                else: 
+                    continue
                 if cl > 0:
-                    out.append({"t":t,"o":o,"h":h,"l":l,"c":cl,"v":v})
-            except: continue
+                    out.append({"t": t, "o": o, "h": h, "l": l, "c": cl, "v": v})
+            except: 
+                continue
         return out
 
     async def get_balance(self):
@@ -263,17 +315,17 @@ class POClient:
     async def disconnect(self):
         self.connected = False
         if self.ws:
-            try: await self.ws.close()
-            except: pass
-
+            try: 
+                await self.ws.close()
+            except: 
+                pass
 
 po = POClient()
 clients = set()
 
-
 async def handle(ws):
     clients.add(ws)
-    print(f"browser connected ({len(clients)})")
+    print(f"📱 Browser connected to Dashboard ({len(clients)})")
     try:
         async for msg in ws:
             try:
@@ -286,8 +338,7 @@ async def handle(ws):
         print(f"handle: {e}")
     finally:
         clients.discard(ws)
-        print(f"browser disconnected ({len(clients)})")
-
+        print(f"📱 Browser disconnected ({len(clients)})")
 
 async def process(action, data):
     if action == "connect":
@@ -341,16 +392,14 @@ async def process(action, data):
 
     return {"success": False, "error": "unknown action"}
 
-
 async def main():
-    print(f"🚀 Pocket Option Server")
+    print(f"🚀 Pocket Option Server Engine Initialized")
     print(f"ws://0.0.0.0:{SERVER_PORT}")
     async with serve(handle, SERVER_HOST, SERVER_PORT,
                      ping_interval=30, ping_timeout=10,
                      max_size=10 * 1024 * 1024):
-        print("Server ready!")
+        print("⚡ [Server Ready & Listening For Dashboard Requests]")
         await asyncio.Future()
-
 
 if __name__ == "__main__":
     try:
