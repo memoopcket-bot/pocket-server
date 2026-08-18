@@ -47,7 +47,7 @@ async def websocket_endpoint(client_ws: WebSocket):
         ssid = init_json.get("ssid")
         
         # رابط خادم المنصة الرسمي المشفر والمستخدم في المكتبات غير الرسمية
-        pocket_url =  "wss://pocketoption.com/socket.io/?EIO=3&transport=websocket"
+        pocket_url =  wss://pocketoption.com/socket.io/?EIO=3&transport=websocket
 
 
         log_to_file(f"محاولة الاتصال بالمنصة برابط: {pocket_url}")
