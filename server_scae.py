@@ -18,15 +18,24 @@ class StreamState:
 
 state = StreamState()
 
+# واجهة طوارئ مدمجة تضمن تشغيل الصفحة فوراً حتى لو اختفى الملف الخارجي
+EMERGENCY_HTML = b"""<!DOCTYPE html><html lang='ar' dir='rtl'><head><meta charset='UTF-8'><title>Passive Bridge 2026</title><style>body{background-color:#121620;color:white;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;} .box{background:#1a202e;padding:30px;border-radius:12px;border:1px solid #263147;text-align:center;max-width:400px;}</style></head><body><div class='box'><h2>⚙️ نفق السيرفر المزدوج نشط</h2><p style='color:#8a96a3;'>تم تشغيل بيئة المعالجة الصامتة لعام 2026 بنجاح. يرجى التأكد من ربط النفق البشري عبر المتصفح لبدء استقبال البايتات الثنائية للأسعار.</p></div></body></html>"""
+
 async def process_request(path, request_headers):
-    # دالة ذكية تقرأ ملف الواجهة الخارجي وسحق الشاشة البيضاء كلياً
     if "upgrade" not in request_headers.get("Connection", "").lower():
-        logger.info("🌍 طلب ويب HTTP وارد: جاري جلب واجهة الـ HTML...")
-        html_content = b"<h1>index.html not found in repository</h1>"
-        if os.path.exists("index.html"):
-            with open("index.html", "rb") as f:
-                html_content = f.read()
-        return (websockets.http.HTTPStatus.OK, {"Content-Type": "text/html; charset=utf-8"}, html_content)
+        logger.info("🌍 طلب ويب HTTP وارد: جاري محاولة جلب واجهة الـ HTML...")
+        
+        # فحص المسارات المتوقعة للملف لمنع أي حظر جيو-مكانى
+        for filename in ["index.html", "INDEX.HTML", "../index.html"]:
+            if os.path.exists(filename):
+                try:
+                    with open(filename, "rb") as f:
+                        return (websockets.http.HTTPStatus.OK, {"Content-Type": "text/html; charset=utf-8"}, f.read())
+                except:
+                    pass
+                    
+        # حالة التغطية الحرجة: إذا تعذر قراءة الملف، يتم ضخ واجهة الطوارئ لمنع الشاشة البيضاء
+        return (websockets.http.HTTPStatus.OK, {"Content-Type": "text/html; charset=utf-8"}, EMERGENCY_HTML)
     return None
 async def parse_and_route_frame(frame, is_binary: bool):
     """المحلل المعماري للباكيتات: يفرز الحزم الحية بكفاءة ثابتة O(1)"""
@@ -48,15 +57,15 @@ async def parse_and_route_frame(frame, is_binary: bool):
             try:
                 data = json.loads(frame[2:])
                 if isinstance(data, list) and len(data) >= 2:
-                    if data[0] == "changeSymbol": state.tracked_asset = data[1].get("asset", "UNKNOWN")
-                    elif data[0] == "subFor": state.tracked_asset = str(data[1])
+                    if data == "changeSymbol": state.tracked_asset = data.get("asset", "UNKNOWN")
+                    elif data == "subFor": state.tracked_asset = str(data)
             except: pass
         elif frame.startswith("451-"):
             try:
                 data = json.loads(frame[4:])
                 if isinstance(data, list) and len(data) >= 2:
                     state.expect_binary = True
-                    state.active_event = data[0]
+                    state.active_event = data
             except: pass
 
 async def bridge_handler(websocket, path=None):
@@ -66,7 +75,7 @@ async def bridge_handler(websocket, path=None):
         async for message in websocket:
             await parse_and_route_frame(message, isinstance(message, bytes))
     except websockets.exceptions.ConnectionClosed:
-        logger.warning("🔌 انفصل النفق البشري الممرر للبيانات.")
+        logger.warning("🔌 انفصل Nفق البشري الممرر للبيانات.")
 
 async def main():
     port = int(os.environ.get("PORT", 8765))
