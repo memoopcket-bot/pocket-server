@@ -68,9 +68,9 @@ class POClient:
             host = url.split("//")[1].split("/")[0]
             try:
                 print(f"Trying {host}...")
-                ws = await self._try_connect(url)
+                ws, conn_err = await self._try_connect(url)
                 if not ws:
-                    attempts.append(f"{host}: تعذر فتح اتصال WebSocket (تحقق من الشبكة/الحظر)")
+                    attempts.append(f"{host}: تعذر فتح اتصال WebSocket ({conn_err or 'سبب غير معروف'})")
                     continue
 
                 await ws.send("40")
@@ -130,6 +130,7 @@ class POClient:
             ("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"),
             ("Cache-Control", "no-cache"),
         ]
+        last_err = None
         for kw in [{"additional_headers": headers}, {"extra_headers": headers}, {}]:
             try:
                 ws = await asyncio.wait_for(
@@ -137,12 +138,12 @@ class POClient:
                     timeout=timeout
                 )
                 await asyncio.wait_for(ws.recv(), timeout=5)
-                return ws
+                return ws, None
             except TypeError:
                 continue
-            except Exception:
-                return None
-        return None
+            except Exception as e:
+                last_err = f"{type(e).__name__}: {str(e)[:150]}"
+        return None, last_err
 
     def _parse(self, msg):
         try:
