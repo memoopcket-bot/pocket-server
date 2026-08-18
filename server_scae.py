@@ -1,134 +1,124 @@
-"""
-server_scae.py - High-Efficiency Multi-Protocol Broker Engine (2026)
-"""
-
 import json
+import logging
 import asyncio
-import traceback
-import os
-import http
-from datetime import datetime
+import websockets
 
-SERVER_HOST = "0.0.0.0"
-SERVER_PORT = int(os.environ.get("PORT", 10000))
+# إعداد السجلات الاحترافية لمراقبة الأداء
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("PO_Passive_Bridge_2026")
 
-try:
-    import websockets
-    from websockets.server import serve
-except ImportError:
-    print("pip install websockets")
-    exit(1)
+# جداول تخزين البيانات اللحظية في الذاكرة (مصفوفات سريعة جداً بقيمة O(1))
+LIVE_MARKET_DATA = {}
+SOCIAL_TRADING_DATA = {}
 
-# حقن كود الواجهة المصحح والمثالي داخل البايثون مباشرة لضمان عرضه
-with open("index.html", "r", encoding="utf-8") as f:
-    HTML_UI = f.read()
-
-class PassiveProcessor:
+class StreamState:
+    """مراقبة تتابع حزم Socket.io الثنائية لمنع تداخل البيانات"""
     def __init__(self):
-        self.connected = False
-        self.balance = 0
-        self._candles = {}
-        self._lock = asyncio.Lock()
+        self.expect_binary = False
+        self.active_event = None
+        self.tracked_asset = "UNKNOWN"
+        self.current_period = 60
 
-    async def process_piped_data(self, event_name, data):
-        self.connected = True
-        if event_name in ("successauth", "updateBalance", "balanceUpdated"):
-            if isinstance(data, dict):
-                b = data.get("balance", data.get("amount", 0))
-                if b: self.balance = float(b)
-            return {"success": True, "balance": self.balance}
+state = StreamState()
 
-        if event_name in ("candles", "loadHistoryPeriod", "history"):
-            if isinstance(data, dict):
-                sym = data.get("asset", data.get("symbol", data.get("pair", "")))
-                cndls = data.get("candles", data.get("data", data.get("history", [])))
-                if sym and cndls:
-                    clean_pair = sym.replace("#", "")
-                    async with self._lock: self._candles[clean_pair] = cndls
-                    fmt_data = self._fmt(cndls, 200)
-                    return {"success": True, "action": "candles", "pair": clean_pair, "count": len(fmt_data), "data": fmt_data}
-        return {"success": True}
-
-    def _fmt(self, raw, limit):
-        out = []
-        for c in raw[-limit:]:
-            try:
-                if isinstance(c, dict):
-                    out.append({"t": int(c.get("time", 0)), "o": float(c.get("open", 0)), "h": float(c.get("high", 0)), "l": float(c.get("low", 0)), "c": float(c.get("close", 0))})
-            except: continue
-        return out
-processor = PassiveProcessor()
-clients = set()
-
-# محرك معالجة طلبات الويب الفرعي لفرض عرض الواجهة الرسومية ومنع الصفحة البيضاء
-def process_request(path, request_headers):
-    # إذا كان الطلب القادم من المتصفح عبارة عن تصفح عادي وليس ترقية سوكيت
-    if "Upgrade" not in request_headers:
-        body = HTML_UI.encode("utf-8")
-        return http.HTTPStatus.OK, [
-            ("Content-Type", "text/html; charset=utf-8"),
-            ("Content-Length", str(len(body))),
-            ("Connection", "close")
-        ], body
-    return None
-
-async def handle(ws):
+async def parse_and_route_frame(frame, is_binary: bool):
     """
-    مستقبل نفق البيانات المباشر الممرر من المتصفح (WebSocket Tunneling)
+    المحلل المعماري للباكيتات: يتلقى الحزم من نفق المتصفح البشري ويفرزها فوراً.
     """
-    clients.add(ws)
-    print(f"📱 Browser connected to Render Backend ({len(clients)})")
-    try:
-        async for msg in ws:
+    # أولاً: إذا كانت الحزمة القادمة عبارة عن بايتات ثنائية (Binary Payload)
+    if is_binary:
+        if state.expect_binary and state.active_event:
+            await decode_binary_payload(state.active_event, frame)
+            # إعادة تصفير الراية فوراً للاستعداد للحزمة القادمة في أجزاء من الملي ثانية
+            state.expect_binary = False
+            state.active_event = None
+        return
+
+    # ثانياً: إذا كانت الحزمة نصية (Text Payload)
+    if isinstance(frame, str):
+        # تغطية الحالات الحرجة: تجاهل رسائل النبض والحفاظ على الاتصال (Ping/Pong)
+        if frame in ["2", "3"] or frame.startswith("42[\"ps\""):
+            return
+
+        # رصد قذائف الأوامر الصادرة من المتصفح (Outbound Client Actions)
+        if frame.startswith("42"):
             try:
-                data = json.loads(msg)
-                action = data.get("action", "")
+                json_str = frame[2:]
+                data_array = json.loads(json_str)
                 
-                if action == "pipe_data":
-                    event_name = data.get("event", "")
-                    payload = data.get("payload", {})
-                    resp = await processor.process_piped_data(event_name, payload)
+                if isinstance(data_array, list) and len(data_array) >= 2:
+                    action = data_array[0]
+                    payload = data_array[1]
                     
-                    if resp and resp.get("action") == "candles":
-                        await ws.send(json.dumps(resp, ensure_ascii=False))
+                    if action == "changeSymbol" and isinstance(payload, dict):
+                        state.tracked_asset = payload.get("asset", "UNKNOWN")
+                        state.current_period = payload.get("period", 60)
+                        logger.info(f"🔄 المتصفح غير الزوج -> {state.tracked_asset} ({state.current_period}s)")
                         
-                elif action == "status":
-                    await ws.send(json.dumps({
-                        "success": True, 
-                        "action": "status",
-                        "connected": processor.connected, 
-                        "balance": processor.balance,
-                        "time": datetime.now().strftime("%H:%M:%S")
-                    }, ensure_ascii=False))
-                    
-                elif action == "disconnect":
-                    processor.connected = False
-                    await ws.send(json.dumps({"success": True, "action": "disconnect"}))
-                    
-            except Exception as e:
-                await ws.send(json.dumps({"success": False, "error": str(e)[:100]}))
-    except Exception as e:
-        print(f"⚠️ handle_error: {e}")
-    finally:
-        clients.discard(ws)
-        print(f"📱 Browser disconnected from Render Backend ({len(clients)})")
+                    elif action == "subFor":
+                        state.tracked_asset = str(payload)
+                        logger.info(f"📡 تفعيل اشتراك البث اللحظي للزوج -> {state.tracked_asset}")
+            except json.JSONDecodeError:
+                pass
 
-async def main():
-    print(f"🚀 Multiproto Broker Engine Initialized")
-    print(f"Server Route: http://0.0.0:{SERVER_PORT}")
-    
-    # دمج محرك الاستجابة الويب للتعرف التلقائي على نوع الاتصال بنجاح
-    async with serve(handle, SERVER_HOST, SERVER_PORT,
-                     process_request=process_request,
-                     ping_interval=30, ping_timeout=10,
-                     max_size=10 * 1024 * 1024):
-        print("⚡ [Passive Backend Listening & Serving Web Page]")
-        await asyncio.Future()
+        # رصد الإشارات التمهيدية للأحداث الثنائية الواردة من السيرفر (Inbound Binary Events)
+        elif frame.startswith("451-"):
+            try:
+                json_str = frame[4:]
+                data_array = json.loads(json_str)
+                
+                if isinstance(data_array, list) and len(data_array) >= 2:
+                    event_name = data_array[0]
+                    
+                    # تفعيل حالة انتظار المرفق الثنائي للحدث الحالي
+                    state.expect_binary = True
+                    state.active_event = event_name
+            except json.JSONDecodeError:
+                pass
 
-if __name__ == "__main__":
+async def decode_binary_payload(event_type: str, binary_bytes: bytes):
+    """
+    تفكيك وقراءة مصفوفة البايتات الحية وتحديث جداول البيانات اللحظية فوراً.
+    """
     try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("Stopped")
-    except Exception:
-        traceback.print_exc()
+        # فك ترميز البايتات الممررة إلى نص مقروء لاستخراج قيم الأرقام الكسرية
+        decoded_data = binary_bytes.decode('utf-8', errors='ignore')
+        
+        if event_type == "updateStream":
+            # تحديث جدول الأسعار اللحظي في الذاكرة بكفاءة ثابتة O(1)
+            LIVE_MARKET_DATA[state.tracked_asset] = {
+                "raw_price_stream": decoded_data[:100],
+                "period": state.current_period
+            }
+            logger.info(f"📈 [داتا أسعار ثنائية] {state.tracked_asset} -> {decoded_data[:60]}")
+            
+        elif event_type == "chafor":
+            SOCIAL_TRADING_DATA[state.tracked_asset] = decoded_data[:100]
+            logger.info(f"💬 [داتا تداول اجتماعي ثنائية] -> {decoded_data[:50]}")
+            
+        elif event_type == "updateCharts":
+            logger.info(f"📊 [داتا شموع ثنائية] تم التحديث بنجاح.")
+            
+    except Exception as e:
+        logger.error(f"❌ خطأ في معالجة بايتات الحدث {event_type}: {str(e)}")
+
+async def bridge_handler(websocket):
+    """المستقبل الصامت لحزم النفق البشري (Passive Bridge Consumer)"""
+    logger.info("🔌 نفق المتصفح البشري متصل بنجاح! خادم Render يستقبل التدفق الثنائي الآن...")
+    try:
+        async for message in websocket:
+            is_bin = isinstance(message, bytes)
+            await parse_and_route_frame(message, is_bin)
+    except websockets.exceptions.ConnectionClosed:
+        logger.info("🔌 انفصل النفق البشري مؤقتاً. بانتظار العودة الحية لإعادة المزامنة...")
+
+# تشغيل السيرفر ليتوافق تماماً مع إعدادات بيئة Render الحالية
+if __name__ == "__main__":
+    import os
+    port = int(os.environ.get("PORT", 8765))
+    
+    start_server = websockets.serve(bridge_handler, "0.0.0.0", port)
+    logger.info(f"🚀 خادم الـ Passive Bridge النهائي يعمل ويستمع على المنفذ: {port}")
+    
+    asyncio.get_event_loop().run_complete(start_server)
+    asyncio.get_event_loop().run_forever()
