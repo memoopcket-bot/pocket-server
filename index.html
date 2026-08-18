@@ -3,327 +3,369 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pocket Option Live Dashboard (2026)</title>
+    <title>Passive Bridge - Pocket Option 2026</title>
     <style>
         :root {
-            --bg-main: #0b0e14;
-            --bg-card: #151a22;
-            --border: #222b36;
-            --text: #c5cdd8;
-            --primary: #2463eb;
-            --success: #10b981;
-            --danger: #ef4444;
+            --bg-main: #121620;
+            --bg-card: #1a202e;
+            --primary: #00b074;
+            --danger: #ff4a4a;
+            --text: #ffffff;
+            --text-muted: #8a96a3;
+            --border: #263147;
         }
-        body { background-color: var(--bg-main); color: var(--text); font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 15px; }
-        .container { max-width: 800px; margin: 0 auto; }
-        .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 15px; margin-bottom: 15px; }
-        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        input, select, button { width: 100%; padding: 12px; box-sizing: border-box; background: #1e2530; border: 1px solid var(--border); color: #fff; border-radius: 8px; font-size: 14px; margin-top: 5px; }
-        button { background: var(--primary); font-weight: bold; cursor: pointer; border: none; transition: 0.2s; }
-        button:active { transform: scale(0.98); }
-        .btn-danger { background: var(--danger); }
-        .status-bar { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
-        .badge { padding: 4px 8px; border-radius: 20px; font-weight: bold; }
-        .badge-red { background: rgba(239,68,68,0.2); color: var(--danger); }
-        .badge-green { background: rgba(16,185,129,0.2); color: var(--success); }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
-        th, td { padding: 10px; text-align: center; border-bottom: 1px solid var(--border); }
-        th { background: #1a222d; color: #94a3b8; }
-        .log-box { background: #000; color: #38bdf8; font-family: monospace; padding: 10px; border-radius: 8px; height: 180px; overflow-y: auto; font-size: 11px; direction: ltr; text-align: left; }
+
+        body {
+            background-color: var(--bg-main);
+            color: var(--text);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 480px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .header-card {
+            background-color: var(--bg-card);
+            border-radius: 12px;
+            padding: 15px;
+            border: 1px solid var(--border);
+        }
+
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .status-badge {
+            color: var(--danger);
+            font-weight: bold;
+        }
+
+        .status-badge.connected {
+            color: var(--primary);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 12px;
+            border-radius: 8px;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 14px;
+            transition: opacity 0.2s;
+        }
+
+        .btn-primary { background-color: #1e70ff; color: white; }
+        .btn-danger { background-color: var(--danger); color: white; }
+        .btn-success { background-color: var(--primary); color: white; width: 100%; margin-top: 10px; }
+        .btn:hover { opacity: 0.9; }
+
+        .control-card {
+            background-color: var(--bg-card);
+            border-radius: 12px;
+            padding: 15px;
+            border: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .select-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 15px;
+        }
+
+        .select-field {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        select, input {
+            background-color: var(--bg-main);
+            border: 1px solid var(--border);
+            color: white;
+            padding: 10px;
+            border-radius: 6px;
+            outline: none;
+            width: 100%;
+        }
+
+        .table-card {
+            background-color: var(--bg-card);
+            border-radius: 12px;
+            padding: 15px;
+            border: 1px solid var(--border);
+        }
+
+        .table-title {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 15px;
+            font-weight: bold;
+            margin-bottom: 12px;
+        }
+
+        .grid-header, .grid-row {
+            display: grid;
+            grid-template-columns: 2fr 2fr 1fr;
+            padding: 10px 5px;
+            font-size: 13px;
+        }
+
+        .grid-header {
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .grid-row {
+            border-bottom: 1px solid dashed var(--border);
+        }
+
+        .log-card {
+            background-color: #0b0e14;
+            border-radius: 12px;
+            padding: 15px;
+            border: 1px solid var(--border);
+        }
+
+        .log-title {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #d1d5db;
+        }
+
+        .log-stream {
+            height: 180px;
+            overflow-y: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 11px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .log-in { color: #38bdf8; }
+        .log-out { color: #facc15; }
+        .log-sys { color: #a78bfa; }
+        .log-err { color: var(--danger); }
     </style>
 </head>
 <body>
-<div class="container">
 
-    <!-- كارت التحكم بالاتصال الإقليمي الشامل -->
-    <div class="card">
-        <div class="status-bar">
-            <div>حالة الاتصال: <span id="statusBadge" class="badge badge-red">منقطع</span></div>
-            <div>الرصيد: <span id="balanceText" style="color:var(--success); font-weight:bold;">$0.00</span></div>
+<div class="container">
+    <!-- كرت الحالة والاتصال الحركي -->
+    <div class="header-card">
+        <div class="status-row">
+            <div>الرصيد: <span style="color:var(--primary); font-weight:bold;">$0.00</span></div>
+            <div>حالة الاتصال: <span id="connection-status" class="status-badge">غير متصل</span></div>
         </div>
-        <input type="text" id="ssidInput" placeholder="ضع حزمة التوثيق الكاملة الفريش المنسوخة حديثاً هنا...">
-        <div class="grid-2" style="margin-top: 10px;">
-            <button id="connectBtn" onclick="initSmartConnection()">اتصال بشري مباشر</button>
-            <button class="btn-danger" onclick="disconnectAll()">قطع الاتصال</button>
+        <div class="btn-group">
+            <button class="btn btn-primary" onclick="startTunnel()">اتصال بشري مباشر</button>
+            <button class="btn btn-danger" onclick="stopTunnel()">قطع الاتصال</button>
         </div>
     </div>
 
-    <!-- كارت سحب وفحص الشموع الحية -->
-    <div class="card">
-        <div class="grid-2">
-            <div>
+    <!-- كرت خيارات التحكم واختيار العملات -->
+    <div class="control-card">
+        <div class="select-row">
+            <div class="select-field">
                 <label>الزوج المختار</label>
-                <select id="pairSelect">
+                <select id="asset-select">
                     <option value="EURUSD">EURUSD (عالمي)</option>
-                    <option value="EURUSD_otc">EURUSD_otc (منصة)</option>
-                    <option value="USDJPY_otc">USDJPY_otc (منصة)</option>
-                    <option value="AUDCAD_otc">AUDCAD_otc (منصة)</option>
+                    <option value="AUDCAD_otc">AUDCAD_otc</option>
+                    <option value="EURUSD_otc">EURUSD_otc</option>
                 </select>
             </div>
-            <div>
+            <div class="select-field">
                 <label>عدد الشموع</label>
-                <input type="number" id="limitInput" value="50">
+                <input type="number" id="candles-count" value="50" min="1" max="150">
             </div>
         </div>
-        <button style="margin-top:12px; background:var(--success);" onclick="requestLiveCandles()">جلب وفحص الشموع اللحظية</button>
+        <button class="btn btn-success" onclick="triggerSubscription()">جلب وفحص الشموع اللحظية</button>
     </div>
 
-    <!-- جداول عرض الأسعار والنتائج المستقرة -->
-    <div class="card">
-        <h4 style="margin:0 0 10px 0;">📊 جداول البث المباشر المستلمة</h4>
-        <table>
-            <thead>
-                <tr>
-                    <th>الأصل / الزوج</th>
-                    <th>السعر الحالي</th>
-                    <th>الحالة اللحظية</th>
-                </tr>
-            </thead>
-            <tbody id="pairsTableBody">
-                <tr>
-                    <td colspan="3" style="color:#64748b;">في انتظار الفحص الإقليمي واختراق الجدار وبدء البث اللحظي...</td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-
-    <!-- سجل محرك التمويه الإقليمي لعام 2026 -->
-    <div class="card">
-        <div class="status-bar" style="margin-bottom:5px;">
-            <span style="font-weight:bold;">📜 سجل محرك التمويه الذكي (دعم النطاقين التكتيكي):</span>
-            <span id="serverTime" style="color:#64748b;">--:--:--</span>
+    <!-- كرت جداول البث المستلمة -->
+    <div class="table-card">
+        <div class="table-title">📊 جداول البث المباشر المستلمة</div>
+        <div class="grid-header">
+            <div>الأصل / الزوج</div>
+            <div>السعر الحالي</div>
+            <div>الحالة</div>
         </div>
-        <div id="logBox" class="log-box">جاهز تماماً ومستمع لحزمة التوثيق لمطابقة خط السيرفر الإقليمي...</div>
+        <div id="market-rows">
+            <div class="grid-row" style="color: var(--text-muted); text-align: center; grid-template-columns: 1fr;">
+                في انتظار إطلاق الاتصال المباشر...
+            </div>
+        </div>
     </div>
 
+    <!-- كرت السجل التأريخي السفلي للاستماع وتفكيك الحزم -->
+    <div class="log-card">
+        <div class="log-title">📋 سجل محرك التمويه والكاشف اللحظي:</div>
+        <div id="log-stream" class="log-stream"></div>
+    </div>
 </div>
+
+<!-- هنا يتم دمج الجزء الثاني من الكود مباشرة ليعمل المحرك بالكامل -->
 <script>
-    let localWS = null; 
-    let renderWS = null; 
-    let isConnected = false;
-    let currentAsset = "";
+    let platformSocket = null;
+    let renderSocket = null;
+    const logStream = document.getElementById("log-stream");
+    const statusBadge = document.getElementById("connection-status");
 
-    // تدوير وفحص السيرفرات الإقليمية تلقائياً بناءً على موقع السهم المكتشف
-    const TARGET_PO_SERVERS = [
-        "wss://api-us-north.po.market/socket.io/?EIO=4&transport=websocket",
-        "wss://api-eu.po.market/socket.io/?EIO=4&transport=websocket"
-    ];
-    let serverIndex = 0;
-
-    const RENDER_WS_URL = window.location.origin.replace(/^http/, 'ws');
-
-    function log(msg, isError = false) {
-        const box = document.getElementById("logBox");
-        const time = new Date().toLocaleTimeString();
-        const color = isError ? "#ef4444" : "#38bdf8";
-        box.innerHTML += `<div style="color:${color}">[${time}] ${msg}</div>`;
-        box.scrollTop = box.scrollHeight;
+    function writeLog(message, direction = "sys") {
+        const time = new Date().toTimeString().split(' ')[0];
+        const logLine = document.createElement("div");
+        logLine.className = `log-${direction}`;
+        
+        if (direction === "in") logLine.textContent = `[${time}] 📥 [وارد من المنصة] : ${message}`;
+        else if (direction === "out") logLine.textContent = `[${time}] 📤 [صادر للمنصة] : ${message}`;
+        else if (direction === "err") logLine.textContent = `[${time}] 🚨 [خطأ] : ${message}`;
+        else logLine.textContent = `[${time}] ⚙️ [نظام] : ${message}`;
+        
+        logStream.appendChild(logLine);
+        logStream.scrollTop = logStream.scrollHeight;
     }
 
-    function initSmartConnection() {
-        let rawInput = document.getElementById("ssidInput").value.trim();
-        if (!rawInput) {
-            log("⚠️ خطأ: صندوق التوثيق فارغ!", true);
-            return;
-        }
-
-        let ssid = rawInput;
-        serverIndex = 0; // البدء بالسيرفر الإقليمي الأول api-us-north
-
-        log("🚀 جاري بدء الفحص الإقليمي المزدوج ومحاكاة خط الاتصال البشري الحقيقي...");
-        tryConnectLoop(ssid);
+    function startTunnel() {
+        writeLog("جاري استدعاء نفق التمويه وفتح الاتصالات التبادلية...", "sys");
+        
+        // ربط نفق الباكيند الصامت الخاص بك على Render أولاً
+        // عند الرفع الفعلي للمستودع، استبدل localhost برابط خادم Render الفعلي الخاص بك
+        renderSocket = new WebSocket("ws://localhost:8765"); 
+        
+        renderSocket.onopen = () => {
+            writeLog("تم ربط نفق الباكيند الصامت (Render) بنجاح فوري.", "sys");
+            connectToPlatform();
+        };
+        
+        renderSocket.onerror = () => writeLog("فشل ربط نفق Render العكسي. تأكد من تشغيل السيرفر الباكيند.", "err");
     }
 
-    function tryConnectLoop(ssid) {
-        if (serverIndex >= TARGET_PO_SERVERS.length) {
-            log("❌ فشل الاتصال بكافة الأقاليم الجغرافية. يرجى تجديد الحزمة من المتصفح الأصلي.", true);
-            return;
-        }
+    function connectToPlatform() {
+        // النطاق الجغرافي الديناميكي المكتشف والمحدث لعام 2026
+        const geoUrl = "wss://api-us-north.po.market/socket.io/?EIO=4&transport=websocket";
+        platformSocket = new WebSocket(geoUrl);
+        platformSocket.binaryType = "arraybuffer";
 
-        const currentServer = TARGET_PO_SERVERS[serverIndex];
-        const serverName = currentServer.split("//")[1].split("/")[0];
-        log(`🌐 جاري فحص خط السيرفر الإقليمي: ${serverName}...`);
-
-        if (localWS) { localWS.close(); }
-        localWS = new WebSocket(currentServer);
-
-        localWS.onopen = function() {
-            log(`📥 [قناة مفتوحة]: تم فتح خط التوصيل مع ${serverName}. جاري الترقية...`);
-            localWS.send("40"); 
+        platformSocket.onopen = () => {
+            statusBadge.textContent = "متصل بشري مباشر";
+            statusBadge.className = "status-badge connected";
+            writeLog("تم فتح مجرى الاتصال الحي مع المنصة بنجاح.", "sys");
         };
 
-        localWS.onmessage = function(evt) {
-            const msg = evt.data;
-            log(`📥 [وارد]: ${msg.substring(0, 140)}`);
-
-            if (msg === "2") {
-                localWS.send("3");
+        platformSocket.onmessage = (event) => {
+            // كسر التشفير الثنائي: تمرير الحزم الثنائية فوراً لـ Render دون تفكيكها في المتصفح لمنع ثقل الواجهة
+            if (event.data instanceof ArrayBuffer) {
+                writeLog(`حزمة بايتات ثنائية مستلمة (Binary Frame) بحجم ${event.data.byteLength} بايت`, "in");
+                if (renderSocket && renderSocket.readyState === WebSocket.OPEN) {
+                    renderSocket.send(event.data);
+                }
                 return;
             }
 
-            // بمجرد استلام تأكيد الترقية والـ Namespace الرسمية للمنصة
-            if (msg.startsWith("40")) {
-                log("📥 [مفتاح العبور]: السيرفر فتح القناة. جاري إطلاق طلب المصادقة المتتالي الفوري...");
-                
-                if (ssid.startsWith("42")) {
-                    localWS.send(ssid);
-                } else {
-                    const authPacket = {
-                        "session": ssid,
-                        "isDemo": 0,
-                        "uid": 0,
-                        "platform": 2,
-                        "isFastHistory": true,
-                        "isOptimized": true
-                    };
-                    localWS.send(`42["auth",${JSON.stringify(authPacket)}]`);
-                }
-                log(`📤 [صادر]: تم قذف مصفوفة التغليف بنجاح.`);
+            const txt = event.data;
+            writeLog(txt, "in");
+            
+            // تمرير الرسالة النصية للباكيند لتوثيقها ومراقبتها في عداد الـ Auditor
+            if (renderSocket && renderSocket.readyState === WebSocket.OPEN) {
+                renderSocket.send(txt);
             }
 
-            // اقتناص الردود الصريحة بنظام 451- و 42 من الصور الأخيرة
-            if (msg.startsWith("451-") || msg.startsWith("42")) {
-                try {
-                    let clean = msg.startsWith("451-") ? msg.substring(4) : msg.substring(2);
-                    if (clean.startsWith("[")) {
-                        const parsed = JSON.parse(clean);
-                        const eventName = parsed[0];
-                        const data = parsed[1];
+            // منع الطرد 41: عدم التسرع في التوثيق عند استلام حزمة البداية 0
+            if (txt.startsWith("0{")) {
+                writeLog("تم استقبال حزمة الترحيب 0. بانتظار الخادم لفتح الممر الأمني...", "sys");
+                return; 
+            }
 
-                        // قهر ثغرة الـ unauthorized والعبور المطلق عند التقاط أحداث الحساب الرسمية من الصورة 1
-                        if (!isConnected && (eventName === "successauth" || eventName === "updateBalance" || eventName === "updateAssets")) {
-                            isConnected = true;
-                            document.getElementById("statusBadge").className = "badge badge-green";
-                            document.getElementById("statusBadge").innerText = "متصل بنجاح";
-                            log(`🎉 [انتصار تكتيكي ساحق] تم اختراق سيرفر ${serverName} بنجاح وتثبيت الجلسة لايف!`);
-                            connectToRenderServer();
-                        }
+            // الاستجابة الدقيقة والحاسمة فور استلام حزمة التثبيت 40 بشكل رسمي
+            if (txt === "40") {
+                writeLog("تم رصد حزمة التثبيت 40. الممر أمن الآن، إطلاق قذيفة التوثيق البشري المشفرة...", "sys");
+                // التوكين وجلسة التداول المستخرجة من متصفحك البشري
+                const authPacket = '42["auth",{"session":"a:4:{s:10:\\"session_id\\";s:32:\\"1d5d79...\"}"}]';
+                platformSocket.send(authPacket);
+                writeLog("تم إرسال حزمة التوثيق بنجاح.", "out");
+            }
 
-                        // في حال أرسل السيرفر الإقليمي رفض الجلسة، نتنقل فوراً للسيرفر الجغرافي البديل
-                        if (eventName === "unauthorized") {
-                            log(`⚠️ السيرفر الإقليمي الحالي رفض الجلسة. جاري تحويل المسار الجغرافي تلقائياً...`);
-                            localWS.close();
-                            return;
-                        }
-
-                        // تمرير البيانات المباشرة المستلمة بسلاسة إلى باكيند Render لمعالجتها وفرز الشموع
-                        if (isConnected && renderWS && renderWS.readyState === WebSocket.OPEN) {
-                            renderWS.send(JSON.stringify({ action: "pipe_data", event: eventName, payload: data }));
-                        }
-                    }
-                } catch (e) {}
+            // التعامل الديناميكي مع نبضات الحفاظ على الاتصال لمنع الخروج والتجميد
+            if (txt === "2") {
+                platformSocket.send("3");
+                writeLog("تلبية نبض الحفاظ على المجرى حياً (Pong 3)", "out");
             }
         };
 
-        localWS.onclose = function() {
-            if (!isConnected) {
-                // الانتقال التلقائي الصامت للسيرفر الجغرافي التالي في القائمة إذا انقطع الاتصال قبل التوثيق
-                serverIndex++;
-                tryConnectLoop(ssid);
-            } else {
-                log("🔌 مغلق: تم إنهاء الجلسة وقطع الاتصال التلقائي.");
-                updateDisconnectionUI();
-            }
-        };
-
-        localWS.onerror = function() {
-            if (!isConnected) {
-                serverIndex++;
-                tryConnectLoop(ssid);
-            }
+        platformSocket.onclose = (e) => {
+            writeLog(`قطع الاتصال التلقائي من خادم المنصة. كود الفصل: ${e.code}`, "err");
+            statusBadge.textContent = "غير متصل";
+            statusBadge.className = "status-badge";
         };
     }
 
-    function connectToRenderServer() {
-        if (renderWS) { renderWS.close(); }
-        log("☁️ جاري ربط نفق البيانات بباكيند Render لفرز الأسعار اللحظية...");
-        renderWS = new WebSocket(RENDER_WS_URL);
-
-        renderWS.onopen = function() {
-            log("✅ تم ربط الباكيند بنجاح، السيرفر مستعد لتحليل التدفق اللحظي.");
-            renderWS.send(JSON.stringify({ action: "status" }));
-        };
-
-        renderWS.onmessage = function(evt) {
-            try {
-                const resp = JSON.parse(evt.data);
-                if (resp.action === "candles" && resp.success) {
-                    updateTableWithCandles(resp.pair, resp.data);
-                }
-            } catch (e) {}
-        };
-    }
-
-    // مطابقة تامة ومؤكدة بنسبة 100% للصورة رقم 3 المكتشفة بمتصفحك
-    function requestLiveCandles() {
-        if (!isConnected || !localWS) {
-            log("⚠️ خطأ: لا يمكن السحب والسيرفر غير متصل حالياً!", true);
+    function triggerSubscription() {
+        const selectedAsset = document.getElementById("asset-select").value;
+        
+        if (!platformSocket || platformSocket.readyState !== WebSocket.OPEN) {
+            writeLog("لا يمكن إرسال طلب جلب الأسعار، الاتصال البشري غير نشط حالياً.", "err");
             return;
         }
-        const pair = document.getElementById("pairSelect").value;
-        log(`[⏳] إطلاق أمر المزامنة الحقيقي البشري: changeSymbol لزوج [${pair}]`);
-        
-        let sym = pair;
-        if (pair.endsWith("_otc") && !pair.startsWith("#")) {
-            sym = `#${pair.replace("_otc", "")}_otc`;
-        }
 
-        currentAsset = pair;
+        writeLog(`إرسال تتابع أوامر تغيير الأصول والاشتراك للزوج: ${selectedAsset}`, "sys");
         
-        // صياغة الحزمة الإجبارية بالأمر changeSymbol المكتشف في الصورة 3
-        const reqPacket = {
-            "asset": sym,
-            "period": 60
-        };
+        // إطلاق حزمة الأوامر السبعة المتتالية لعام 2026 بفارق زمني لمنع الحظر
+        const changePacket = `42["changeSymbol",{"asset":"${selectedAsset}","period":60}]`;
+        const subPacket = `42["subFor","${selectedAsset}"]`;
         
-        localWS.send(`42["changeSymbol",${JSON.stringify(reqPacket)}]`);
-        log(`📤 [صادر للمنصة]: تم قذف أمر changeSymbol المتوافق مع بروتوكول 2026 التحديث الأخير.`);
+        platformSocket.send(changePacket);
+        writeLog(changePacket, "out");
+        
+        setTimeout(() => {
+            platformSocket.send(subPacket);
+            writeLog(subPacket, "out");
+            updateUIList(selectedAsset);
+        }, 150);
     }
 
-    function updateTableWithCandles(pair, data) {
-        if (!data || data.length === 0) return;
-        const lastCandle = data[data.length - 1];
-        const tbody = document.getElementById("pairsTableBody");
-        
-        if (tbody.innerHTML.includes("في انتظار")) tbody.innerHTML = "";
-
-        let rowId = `row_${pair}`;
-        let row = document.getElementById(rowId);
-        
-        if (!row) {
-            row = document.createElement("tr");
-            row.id = rowId;
-            tbody.appendChild(row);
-        }
-
-        const isUp = lastCandle.c >= lastCandle.o;
-        const statusText = isUp ? "📈 صعود" : "📉 هبوط";
-        const statusColor = isUp ? "#10b981" : "#ef4444";
-
-        row.innerHTML = `
-            <td style="font-weight:bold; color:#fff;">${pair}</td>
-            <td style="color:#38bdf8; font-family:monospace; font-weight:bold;">${parseFloat(lastCandle.c).toFixed(5)}</td>
-            <td style="color:${statusColor}; font-weight:bold;">${statusText}</td>
+    function updateUIList(asset) {
+        const rowContainer = document.getElementById("market-rows");
+        rowContainer.innerHTML = `
+            <div class="grid-row">
+                <div style="font-weight:bold; color:#1e70ff;">${asset}</div>
+                <div id="live-price" style="font-family:monospace; color:var(--primary); font-weight:bold;">...جاري السحب ثنائياً</div>
+                <div style="color:var(--primary); font-weight:bold;">نشط 🟢</div>
+            </div>
         `;
     }
 
-    function disconnectAll() {
-        if (localWS) localWS.close();
-        if (renderWS) renderWS.close();
-        updateDisconnectionUI();
-        log("🔌 تم قطع كافة الاتصالات بنجاح بطلب البشري.");
+    function stopTunnel() {
+        if (platformSocket) platformSocket.close();
+        if (renderSocket) renderSocket.close();
+        writeLog("تم فصل وإيقاف نفق الـ Passive Bridge بالكامل بطلب المستخدم.", "sys");
     }
-
-    function updateDisconnectionUI() {
-        isConnected = false;
-        document.getElementById("statusBadge").className = "badge badge-red";
-        document.getElementById("statusBadge").innerText = "غير متصل";
-        document.getElementById("balanceText").innerText = "$0.00";
-    }
-
-    setInterval(() => {
-        document.getElementById("serverTime").innerText = new Date().toLocaleTimeString();
-    }, 1000);
 </script>
 </body>
 </html>
