@@ -35,7 +35,7 @@
 <body>
 <div class="container">
 
-    <!-- كارت التحكم بالاتصال المطور القاطع للشك -->
+    <!-- كارت التحكم بالاتصال الفوري الصارم -->
     <div class="card">
         <div class="status-bar">
             <div>حالة الاتصال: <span id="statusBadge" class="badge badge-red">منقطع</span></div>
@@ -81,19 +81,19 @@
             </thead>
             <tbody id="pairsTableBody">
                 <tr>
-                    <td colspan="3" style="color:#64748b;">في انتظار اختراق الجدار وبدء البث اللحظي...</td>
+                    <td colspan="3" style="color:#64748b;">في انتظار الإرسال المتتالي الفوري وبدء البث اللحظي...</td>
                 </tr>
             </tbody>
         </table>
     </div>
 
-    <!-- سجل محرك التمويه المكشوف المطابق للـ DevTools -->
+    <!-- سجل محرك التمويه المكشوف القاطع للشك -->
     <div class="card">
         <div class="status-bar" style="margin-bottom:5px;">
-            <span style="font-weight:bold;">📜 سجل محرك التمويه والكاشف اللحظي (طراز 2026):</span>
+            <span style="font-weight:bold;">📜 سجل محرك التمويه المحدث (إطلاق متتالي للطلبات):</span>
             <span id="serverTime" style="color:#64748b;">--:--:--</span>
         </div>
-        <div id="logBox" class="log-box">مستعد تماماً لتلقي الـ sessionToken ومطابقة الأسلوب البشري...</div>
+        <div id="logBox" class="log-box">مستعد تماماً لتطبيق خطة الإرسال المتتالي الفوري للأوامر...</div>
     </div>
 
 </div>
@@ -101,7 +101,7 @@
     let localWS = null; 
     let renderWS = null; 
     let isConnected = false;
-    let pingInterval = null;
+    let currentAsset = "";
 
     const RENDER_WS_URL = window.location.origin.replace(/^http/, 'ws');
 
@@ -120,51 +120,28 @@
             return;
         }
 
-        let token = "";
+        let ssid = rawInput;
 
-        // اقتناص الـ sessionToken ذكياً إذا تم نسخ الحزمة الكاملة من الـ DevTools
-        if (rawInput.includes("sessionToken")) {
-            try {
-                const match = rawInput.match(/"sessionToken":"([a-f0-9]{32})"/);
-                if (match && match[1]) {
-                    token = match[1];
-                    log(`✅ تم اقتناص الـ sessionToken بنجاح: ${token}`);
-                }
-            } catch (e) {
-                log("⚠️ تنبيه: فشل استخراج الـ token تلقائياً.");
-            }
-        }
-
-        if (!token && rawInput.includes("session_id")) {
+        // استخراج الـ session الصافي ذكياً من الحزمة الكاملة المنسوخة
+        if (rawInput.includes("session") && rawInput.includes("session_id")) {
             try {
                 const match = rawInput.match(/session_id\\";s:32:\\"([a-f0-9]{32})\\"/);
                 if (match && match[1]) {
-                    token = match[1];
-                    log(`✅ تم اقتناص الـ token من حزمة الـ session_id القديمة: ${token}`);
+                    ssid = rawInput; // نمرر الحزمة الكاملة لأنها تحتوي على صيغة session الأصلية
+                    log(`✅ تم اقتناص الحزمة الكاملة المطابقة للصورة 1 ✓`);
                 }
             } catch (e) {}
         }
 
-        if (!token) {
-            if (rawInput.startsWith("42")) rawInput = rawInput.substring(2);
-            try {
-                const parsed = JSON.parse(rawInput);
-                token = parsed.sessionToken || parsed.session || rawInput;
-            } catch (e) {
-                token = rawInput;
-            }
-        }
-
-        log("🚀 جاري البدء ببناء الحزمة البشرية المطابقة للـ DevTools...");
-        connectToPocketOption(token);
+        log("🚀 جاري بدء الإرسال المتتالي الفوري للطلبات ومحاكاة المتصفح...");
+        connectToPocketOption(ssid);
     }
 
-    function connectToPocketOption(token) {
+    function connectToPocketOption(ssid) {
         if (localWS) { localWS.close(); }
-        if (pingInterval) { clearInterval(pingInterval); }
 
         const targetServer = "wss://api-eu.po.market/socket.io/?EIO=4&transport=websocket";
-        log(`🌐 جاري فتح الاتصال المباشر مع خادم المنصة الرئيسي...`);
+        log(`🌐 جاري توجيه طلب الـ WebSocket إلى السيرفر الرئيسي للمنصة...`);
         
         localWS = new WebSocket(targetServer);
 
@@ -175,7 +152,9 @@
 
         localWS.onmessage = function(evt) {
             const msg = evt.data;
-            log(`📥 [وارد من المنصة]: ${msg.substring(0, 140)}`);
+            
+            // طباعة كاشفة ومطابقة للـ DevTools لديك تماماً لسهولة المراقبة
+            log(`📥 [وارد]: ${msg.substring(0, 140)}`);
 
             if (msg === "2") {
                 localWS.send("3");
@@ -183,67 +162,60 @@
             }
 
             if (msg.startsWith("0")) {
-                log("📥 [خطوة 2]: استقبال حزمة الترحيب 0 بنجاح.");
+                log("📥 [خطوة 2]: استقبال حزمة الترحيب 0.");
             }
 
-            // عند استقبال تأكيد الـ Namespace من السيرفر (الحزمة 40)
+            // بمجرد فتح القناة وتأكيد الـ Namespace (الحزمة 40) من السيرفر
             if (msg.startsWith("40")) {
-                log("📥 [خطوة 3]: السيرفر فتح البوابة. جاري حقن الـ sessionToken في القالب النقي...");
+                log("📥 [خطوة 3]: السيرفر فتح القناة. جاري إطلاق حزمة التوثيق الأصلية فوراً...");
                 
-                // صياغة الحزمة بالشكل والاسم الجوهري المكتشف في الصور [sessionToken]
-                const authPacket = {
-                    "sessionToken": token,
-                    "isDemo": 0,
-                    "uid": 0,
-                    "platform": 2,
-                    "isFastHistory": true,
-                    "isOptimized": true
-                };
-                
-                localWS.send(`42["auth",${JSON.stringify(authPacket)}]`);
-                log(`📤 [صادر]: تم قذف حزمة التغليف اليدوي النقي المحدث.`);
+                if (ssid.startsWith("42")) {
+                    localWS.send(ssid);
+                } else {
+                    const authPacket = {
+                        "session": ssid,
+                        "isDemo": 0,
+                        "uid": 0,
+                        "platform": 2,
+                        "isFastHistory": true,
+                        "isOptimized": true
+                    };
+                    localWS.send(`42["auth",${JSON.stringify(authPacket)}]`);
+                }
+                log(`📤 [صادر]: تم قذف طلب المصادقة بنجاح.`);
             }
 
-            if (msg.startsWith("42")) {
+            // فحص واقتناص ردود النجاح ببروتوكول الـ 451- المكتشف في الصورة 1
+            if (msg.startsWith("451-") || msg.startsWith("42")) {
                 try {
-                    const clean = msg.substring(2);
-                    const parsed = JSON.parse(clean);
-                    const eventName = parsed[0];
-                    const data = parsed[1];
+                    let clean = msg.startsWith("451-") ? msg.substring(4) : msg.substring(2);
+                    if (clean.startsWith("[")) {
+                        const parsed = JSON.parse(clean);
+                        const eventName = parsed[0];
+                        const data = parsed[1];
 
-                    log(`🔔 [حدث مكتشف]: اسم الرد الوارد هو (${eventName})`);
+                        // تفعيل فوري عند التقاط نجاح التوثيق successauth الصريح من الصورة 1
+                        if (!isConnected && (eventName === "successauth" || eventName === "updateBalance" || eventName === "updateAssets")) {
+                            isConnected = true;
+                            document.getElementById("statusBadge").className = "badge badge-green";
+                            document.getElementById("statusBadge").innerText = "متصل بنجاح";
+                            log("🎉 [سحق نهائي للحظر] المنصة قبلت الجلسة والبث اللحظي انطلق بامتياز!");
+                            connectToRenderServer();
+                        }
 
-                    // الفحص الصارم والنهائي بناءً على البنود: التحقق من حدث النجاح الصريح auth/success [cite: 1]
-                    if (eventName === "auth/success") {
-                        isConnected = true;
-                        document.getElementById("statusBadge").className = "badge badge-green";
-                        document.getElementById("statusBadge").innerText = "متصل بنجاح";
-                        log("🎉 [سحق الحظر] تم العبور وقبول الجلسة بثبات كامل! انطلق البث اللحظي.");
-                        
-                        // بدء تشغيل نبضات الحفاظ على استقرار البث المحاكية للمتصفح [cite: 1]
-                        startPingServerLoop();
-                        
-                        // ربط البيانات بالباكيند على ريندر
-                        connectToRenderServer();
+                        // تحديث جدول الأسعار اللحظي فور استقبال حزمة البيانات الحية
+                        if (eventName === "loadHistoryPeriod" || eventName === "candles" || typeof data === 'object') {
+                            if (renderWS && renderWS.readyState === WebSocket.OPEN) {
+                                renderWS.send(JSON.stringify({ action: "pipe_data", event: eventName, payload: data }));
+                            }
+                        }
                     }
-
-                    if (data && (data.balance !== undefined || data.amount !== undefined)) {
-                        const bal = data.balance || data.amount || 0;
-                        document.getElementById("balanceText").innerText = `$${parseFloat(bal).toFixed(2)}`;
-                    }
-
-                    if (renderWS && renderWS.readyState === WebSocket.OPEN) {
-                        renderWS.send(JSON.stringify({ action: "pipe_data", event: eventName, payload: data }));
-                    }
-
-                } catch (e) {
-                    log(`⚠️ خطأ في التفسير: ${e.message}`, true);
-                }
+                } catch (e) {}
             }
         };
 
         localWS.onerror = function(err) {
-            log("❌ خطأ: السيرفر قطع الاتصال فوراً الجلسة تالفة.", true);
+            log("❌ خطأ: خط الاتصال المباشر واجه خللاً.", true);
         };
 
         localWS.onclose = function() {
@@ -252,23 +224,13 @@
         };
     }
 
-    // محرك الـ ping-server المكتشف للمحافظة على ضخ الشموع حياً [cite: 1]
-    function startPingServerLoop() {
-        pingInterval = setInterval(() => {
-            if (localWS && localWS.readyState === WebSocket.OPEN && isConnected) {
-                localWS.send('42["ping-server"]');
-                log("📤 [صادر للمنصة]: إرسال نبضة ping-server لتثبيت ضخ الأسعار اللحظية [cite: 1]");
-            }
-        }, 15000); // إرسال النبضة كل 15 ثانية لمطابقة سلوك متصفحك الأصلي
-    }
-
     function connectToRenderServer() {
         if (renderWS) { renderWS.close(); }
-        log("☁️ جاري ربط نفق البيانات بباكيند Render...");
+        log("☁️ جاري ربط نفق البيانات بباكيند Render لفرز الأسعار...");
         renderWS = new WebSocket(RENDER_WS_URL);
 
         renderWS.onopen = function() {
-            log("✅ تم ربط الباكيند بنجاح، السيرفر مستعد لفرز الشموع.");
+            log("✅ تم ربط الباكيند بنجاح، السيرفر مستعد لتحليل التدفق اللحظي.");
             renderWS.send(JSON.stringify({ action: "status" }));
         };
 
@@ -282,23 +244,30 @@
         };
     }
 
+    // مطابقة تكتيكية تامة للصورة 3: استخدام بروتوكول changeSymbol المباشر للمنصة
     function requestLiveCandles() {
         if (!isConnected || !localWS) {
-            log("⚠️ خطأ: لا يمكن طلب الشموع والسيرفر منقطع!", true);
+            log("⚠️ خطأ: لا يمكن السحب والسيرفر غير متصل حالياً!", true);
             return;
         }
         const pair = document.getElementById("pairSelect").value;
-        const limit = document.getElementById("limitInput").value || 50;
-
-        log(`[⏳] طلب شموع: ${pair} - فريم 1 د - ${limit} شمعة`);
+        log(`[⏳] إطلاق أمر البث اللحظي الحقيقي: changeSymbol للزوج [${pair}]`);
         
         let sym = pair;
         if (pair.endsWith("_otc") && !pair.startsWith("#")) {
             sym = `#${pair.replace("_otc", "")}_otc`;
         }
+
+        currentAsset = pair;
         
-        const req = { "asset": sym, "period": 60, "time": Math.floor(Date.now() / 1000), "count": parseInt(limit) };
-        localWS.send(`42["loadHistoryPeriod",${JSON.stringify(req)}]`);
+        // صياغة الحزمة بالشكل والأمر المكتشف في الصورة 3 تماماً
+        const reqPacket = {
+            "asset": sym,
+            "period": 60
+        };
+        
+        localWS.send(`42["changeSymbol",${JSON.stringify(reqPacket)}]`);
+        log(`📤 [صادر للمنصة]: تم قذف أمر changeSymbol المتوافق مع بروتوكول 2026.`);
     }
 
     function updateTableWithCandles(pair, data) {
@@ -332,12 +301,11 @@
         if (localWS) localWS.close();
         if (renderWS) renderWS.close();
         updateDisconnectionUI();
-        log("🔌 تم قطع الاتصال بالكامل.");
+        log("🔌 تم قطع كافة الاتصالات بنجاح.");
     }
 
     function updateDisconnectionUI() {
         isConnected = false;
-        if (pingInterval) { clearInterval(pingInterval); }
         document.getElementById("statusBadge").className = "badge badge-red";
         document.getElementById("statusBadge").innerText = "غير متصل";
         document.getElementById("balanceText").innerText = "$0.00";
