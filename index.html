@@ -230,8 +230,6 @@
         <div id="log-stream" class="log-stream"></div>
     </div>
 </div>
-
-<!-- هنا يتم دمج الجزء الثاني من الكود مباشرة ليعمل المحرك بالكامل -->
 <script>
     let platformSocket = null;
     let renderSocket = null;
@@ -255,16 +253,15 @@
     function startTunnel() {
         writeLog("جاري استدعاء نفق التمويه وفتح الاتصالات التبادلية...", "sys");
         
-        // ربط نفق الباكيند الصامت الخاص بك على Render أولاً
-        // عند الرفع الفعلي للمستودع، استبدل localhost برابط خادم Render الفعلي الخاص بك
-        renderSocket = new WebSocket("ws://localhost:8765"); 
+        // الربط المباشر بسيرفر Render الحي والمستقر والناجح الخاص بك بنظام wss الآمن
+        renderSocket = new WebSocket("wss://://onrender.com"); 
         
         renderSocket.onopen = () => {
-            writeLog("تم ربط نفق الباكيند الصامت (Render) بنجاح فوري.", "sys");
+            writeLog("تم ربط نفق الباكيند الصامت (Render) بنجاح فوري وبوضع آمن.", "sys");
             connectToPlatform();
         };
         
-        renderSocket.onerror = () => writeLog("فشل ربط نفق Render العكسي. تأكد من تشغيل السيرفر الباكيند.", "err");
+        renderSocket.onerror = () => writeLog("فشل ربط نفق Render العكسي سحابياً. تحقق من حالة الاستضافة.", "err");
     }
 
     function connectToPlatform() {
@@ -305,7 +302,7 @@
 
             // الاستجابة الدقيقة والحاسمة فور استلام حزمة التثبيت 40 بشكل رسمي
             if (txt === "40") {
-                writeLog("تم رصد حزمة التثبيت 40. الممر أمن الآن، إطلاق قذيفة التوثيق البشري المشفرة...", "sys");
+                writeLog("تم رصد حزمة التثبيت 40. الممر آمن الآن، إطلاق قذيفة التوثيق البشري المشفرة...", "sys");
                 // التوكين وجلسة التداول المستخرجة من متصفحك البشري
                 const authPacket = '42["auth",{"session":"a:4:{s:10:\\"session_id\\";s:32:\\"1d5d79...\"}"}]';
                 platformSocket.send(authPacket);
