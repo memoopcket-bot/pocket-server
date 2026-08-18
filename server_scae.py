@@ -81,8 +81,8 @@ class PassiveProcessor:
         for c in raw[-limit:]:
             try:
                 if isinstance(c, (list, tuple)) and len(c) >= 5:
-                    t, o, h, l, cl = int(c[0]), float(c[1]), float(c[2]), float(c[3]), float(c[4])
-                    v = float(c[5]) if len(c) > 5 else 1.0
+                    t, o, h, l, cl = int(c), float(c), float(c), float(c), float(c)
+                    v = float(c) if len(c) > 5 else 1.0
                 elif isinstance(c, dict):
                     t = int(c.get("time", c.get("t", 0)))
                     o = float(c.get("open", c.get("o", 0)))
@@ -104,7 +104,6 @@ async def handle(ws):
     clients.add(ws)
     print(f"📱 Browser connected to Render Backend ({len(clients)})")
     try:
-        async join_loop = asyncio.current_task()
         async for msg in ws:
             try:
                 data = json.loads(msg)
