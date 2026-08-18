@@ -88,7 +88,7 @@
             font-family: monospace;
             padding: 10px;
             border-radius: 8px;
-            height: 120px;
+            height: 140px;
             overflow-y: auto;
             font-size: 11px;
             direction: ltr;
@@ -162,12 +162,10 @@
 
 </div>
 <script>
-    let localWS = null; // الاتصال المباشر بمنصة بوكت أوبشن
-    let renderWS = null; // الاتصال بسيرفر ريندر المخصص للباكيند
+    let localWS = null; 
+    let renderWS = null; 
     let isConnected = false;
-    let pingInterval = null;
 
-    // تحديد رابط سيرفر ريندر تلقائياً بناءً على رابط الصفحة الحالي
     const RENDER_WS_URL = window.location.origin.replace(/^http/, 'ws');
 
     function log(msg, isError = false) {
@@ -178,7 +176,6 @@
         box.scrollTop = box.scrollHeight;
     }
 
-    // تشغيل محرك الاتصال الذكي المزدوج
     function initSmartConnection() {
         let ssid = document.getElementById("ssidInput").value.trim();
         if (!ssid) {
@@ -186,54 +183,47 @@
             return;
         }
 
-        // إذا كانت الحزمة المنسوخة كاملة، نستخرج الـ SSID منها ذكياً
         if (ssid.includes("auth")) {
             try {
                 if (ssid.startsWith("42")) ssid = ssid.substring(2);
                 const parsed = JSON.parse(ssid);
-                if (parsed[1] && parsed[1].session) {
-                    ssid = parsed[1].session;
+                if (parsed && parsed.session) {
+                    ssid = parsed.session;
+                    log("✅ تم استخراج قيمة الجلسة تلقائياً من النص الملحق ✓");
                 }
             } catch (e) {
-                log("⚠️ تحذير: فشل تفكيك الحزمة الكاملة، سيتم تجربة الاتصال بالنص المنسوخ كما هو.");
+                log("⚠️ تنبيه: سيتم استخدام نص التوثيق المنسوخ مباشرة.");
             }
         }
 
-        log("🔗 جاري تشغيل الجسر البشري المباشر (Client-Side Bridge)...");
+        log("🚀 تم فتح الاتصال بالسيرفر، جاري تسجيل الدخول...");
         connectToPocketOption(ssid);
     }
 
-    // 1. الاتصال المباشر من هاتفك بالمنصة (يستحيل حظره بـ 403 لأن الـ IP بشري ومقبول)
     function connectToPocketOption(ssid) {
         if (localWS) { localWS.close(); }
 
         const targetServer = "wss://api-eu.po.market/socket.io/?EIO=4&transport=websocket";
-        log(`🌐 جاري الاتصال بالسيرفر الرسمي عبر متصفحك: api-eu.po.market`);
-
         localWS = new WebSocket(targetServer);
 
         localWS.onopen = function() {
-            log("⚡ تم فتح خط الاتصال المباشر مع المنصة بنجاح! جاري الترقية والتوثيق...");
-            localWS.send("40"); // حزمة ترقية بروتوكول Socket.IO
+            localWS.send("40"); 
         };
 
         localWS.onmessage = function(evt) {
             const msg = evt.data;
 
-            // محرك الحفاظ على الاتصال حياً (Ping-Pong) تلقائياً
             if (msg === "2") {
                 localWS.send("3");
                 return;
             }
 
             if (msg.startsWith("0")) {
-                // إرسال حزمة التوثيق فور استقبال رسالة الترحيب من السيرفر
                 const authPacket = {
                     "session": ssid, "isDemo": 0, "uid": 0,
                     "platform": 2, "isFastHistory": true, "isOptimized": true
                 };
                 localWS.send(`42["auth",${JSON.stringify(authPacket)}]`);
-                log("🔑 تم إرسال حزمة التوثيق الآمنة للمنصة.");
             }
 
             if (msg.startsWith("42")) {
@@ -243,23 +233,20 @@
                     const eventName = parsed[0];
                     const data = parsed[1];
 
-                    if (eventName === "successauth") {
+                    // توسيع ذكي لشرط النجاح: نعتبر الاتصال ناجحاً إذا أكد السيرفر الدخول أو أرسل بيانات الأصول والترصيد
+                    if (!isConnected && (eventName === "successauth" || eventName === "updateBalance" || eventName === "balanceUpdated" || eventName === "updateAssets")) {
                         isConnected = true;
                         document.getElementById("statusBadge").className = "badge badge-green";
                         document.getElementById("statusBadge").innerText = "متصل بنجاح";
-                        log("🎉 [نجاح التوثيق] المنصة قبلت الجلسة والبث اللحظي يعمل الآن!");
-                        
-                        // ربط الاتصال بسيرفر Render لنقل البيانات إليه
+                        log("🎉 [تم التوثيق بامتياز] البث اللحظي للأسعار يعمل الآن بدون حظر!");
                         connectToRenderServer();
                     }
 
-                    // تحديث الرصيد لايف في الواجهة
                     if (data && (data.balance !== undefined || data.amount !== undefined)) {
                         const bal = data.balance || data.amount || 0;
                         document.getElementById("balanceText").innerText = `$${parseFloat(bal).toFixed(2)}`;
                     }
 
-                    // تمرير البيانات المباشرة المستلمة من هاتفك إلى خادم ريندر لمعالجتها
                     if (renderWS && renderWS.readyState === WebSocket.OPEN) {
                         renderWS.send(JSON.stringify({ action: "pipe_data", event: eventName, payload: data }));
                     }
@@ -269,54 +256,45 @@
         };
 
         localWS.onerror = function(err) {
-            log("❌ خطأ في الاتصال المباشر بالمنصة. تأكد من أن الـ SSID صالح ولم تنتهي صلاحيته.", true);
+            log("❌ خطأ في خط الاتصال المباشر.", true);
         };
 
         localWS.onclose = function() {
-            log("🔌 تم قطع الاتصال بالسيرفر الرئيسي للمنصة.");
+            log("🔌 انقطع الاتصال بالسيرفر الرئيسي.");
             updateDisconnectionUI();
         };
     }
 
-    // 2. ربط متصفحك بسيرفر Render لنقل الأسعار وحساب الشموع المفرزة [1]
     function connectToRenderServer() {
         if (renderWS) { renderWS.close(); }
-        log("☁️ جاري ربط البيانات المستلمة بسيرفر الباكيند (Render)...");
-
         renderWS = new WebSocket(RENDER_WS_URL);
 
         renderWS.onopen = function() {
-            log("✅ تم ربط الباكيند بنجاح، السيرفر جاهز الآن لفرز وتحليل الشموع.");
-            // إرسال نبضة أولى لتأكيد الربط
             renderWS.send(JSON.stringify({ action: "status" }));
         };
 
         renderWS.onmessage = function(evt) {
             try {
                 const resp = JSON.parse(evt.data);
-                // هنا يتم استقبال نتائج التحليل والفرز وجلب الشموع من سيرفر ريندر لعرضها بالجدول
                 if (resp.action === "candles" && resp.success) {
-                    log(`📊 تم استلام وتحليل عدد ${resp.count} شمعة لزوج ${resp.pair} بنجاح.`);
                     updateTableWithCandles(resp.pair, resp.data);
                 }
             } catch (e) {}
         };
     }
 
-    // طلب جلب وفحص الشموع اللحظية بناءً على خيارات المستخدم
     function requestLiveCandles() {
         if (!isConnected || !localWS) {
-            log("⚠️ خطأ: لا يمكنك طلب الشموع والسيرفر غير متصل!", true);
+            log("⚠️ خطأ: السيرفر غير متصل حالياً!", true);
             return;
         }
         const pair = document.getElementById("pairSelect").value;
         const limit = document.getElementById("limitInput").value || 50;
 
-        log(`🔄 جاري إرسال طلب جلب الشموع لزوج [${pair}]...`);
+        log(`[⏳] طلب شموع: ${pair} - فريم 1 د - ${limit} شمعة`);
         
-        // صياغة الطلب وإرساله عبر الخط المباشر
         let sym = pair;
-        if (pair.endsWith("_otc")) {
+        if (pair.endswith("_otc") && !pair.startsWith("#")) {
             sym = `#${pair.replace("_otc", "")}_otc`;
         }
         
@@ -329,7 +307,6 @@
         const lastCandle = data[data.length - 1];
         const tbody = document.getElementById("pairsTableBody");
         
-        // مسح النص الافتراضي عند أول استقبال للبيانات
         if (tbody.innerHTML.includes("في انتظار")) tbody.innerHTML = "";
 
         let rowId = `row_${pair}`;
@@ -341,12 +318,13 @@
             tbody.appendChild(row);
         }
 
-        const statusText = lastCandle.c > lastCandle.o ? "📈 صعود" : "📉 هبوط";
-        const statusColor = lastCandle.c > lastCandle.o ? var(--success) : var(--danger);
+        const isUp = lastCandle.c >= lastCandle.o;
+        const statusText = isUp ? "📈 صعود" : "📉 هبوط";
+        const statusColor = isUp ? "#10b981" : "#ef4444";
 
         row.innerHTML = `
-            <td style="font-weight:bold;">${pair}</td>
-            <td style="color:#fff; font-family:monospace;">${lastCandle.c}</td>
+            <td style="font-weight:bold; color:#fff;">${pair}</td>
+            <td style="color:#38bdf8; font-family:monospace; font-weight:bold;">${parseFloat(lastCandle.c).toFixed(5)}</td>
             <td style="color:${statusColor}; font-weight:bold;">${statusText}</td>
         `;
     }
@@ -354,18 +332,17 @@
     function disconnectAll() {
         if (localWS) localWS.close();
         if (renderWS) renderWS.close();
-        log("🔌 تم قطع كافة الاتصالات بناءً على طلب المستخدم.");
         updateDisconnectionUI();
+        log("🔌 تم قطع الاتصال بالكامل.");
     }
 
     function updateDisconnectionUI() {
         isConnected = false;
         document.getElementById("statusBadge").className = "badge badge-red";
-        document.getElementById("statusBadge").innerText = "منقطع";
+        document.getElementById("statusBadge").innerText = "غير متصل";
         document.getElementById("balanceText").innerText = "$0.00";
     }
 
-    // تحديث ساعة النظام في الواجهة كل ثانية
     setInterval(() => {
         document.getElementById("serverTime").innerText = new Date().toLocaleTimeString();
     }, 1000);
