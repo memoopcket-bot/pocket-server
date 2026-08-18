@@ -18,14 +18,14 @@ class StreamState:
 
 state = StreamState()
 
-# واجهة طوارئ مدمجة تضمن تشغيل الصفحة فوراً حتى لو اختفى الملف الخارجي
-EMERGENCY_HTML = b"""<!DOCTYPE html><html lang='ar' dir='rtl'><head><meta charset='UTF-8'><title>Passive Bridge 2026</title><style>body{background-color:#121620;color:white;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;} .box{background:#1a202e;padding:30px;border-radius:12px;border:1px solid #263147;text-align:center;max-width:400px;}</style></head><body><div class='box'><h2>⚙️ نفق السيرفر المزدوج نشط</h2><p style='color:#8a96a3;'>تم تشغيل بيئة المعالجة الصامتة لعام 2026 بنجاح. يرجى التأكد من ربط النفق البشري عبر المتصفح لبدء استقبال البايتات الثنائية للأسعار.</p></div></body></html>"""
+# واجهة طوارئ إنجليزية صافية 100% متوافقة مع ASCII لمنع انهيار مفسر بايثون
+EMERGENCY_HTML = b"""<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Passive Bridge 2026</title><style>body{background-color:#121620;color:white;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;} .box{background:#1a202e;padding:30px;border-radius:12px;border:1px solid #263147;text-align:center;max-width:400px;}</style></head><body><div class='box'><h2>Dual Engine Server Active</h2><p style='color:#8a96a3;'>Passive Processor 2026 is running successfully. Please ensure index.html is requested or human tunnel is active.</p></div></body></html>"""
 
 async def process_request(path, request_headers):
     if "upgrade" not in request_headers.get("Connection", "").lower():
-        logger.info("🌍 طلب ويب HTTP وارد: جاري محاولة جلب واجهة الـ HTML...")
+        logger.info("🌍 HTTP Request received: Attempting to serve HTML...")
         
-        # فحص المسارات المتوقعة للملف لمنع أي حظر جيو-مكانى
+        # محاولة قراءة ملف الواجهة الخارجي بكافة المسميات المحتملة
         for filename in ["index.html", "INDEX.HTML", "../index.html"]:
             if os.path.exists(filename):
                 try:
@@ -34,7 +34,7 @@ async def process_request(path, request_headers):
                 except:
                     pass
                     
-        # حالة التغطية الحرجة: إذا تعذر قراءة الملف، يتم ضخ واجهة الطوارئ لمنع الشاشة البيضاء
+        # في حال عدم توفر الملف الخارجي، يتم ضخ واجهة الطوارئ الآمنة لمنع الشاشة البيضاء
         return (websockets.http.HTTPStatus.OK, {"Content-Type": "text/html; charset=utf-8"}, EMERGENCY_HTML)
     return None
 async def parse_and_route_frame(frame, is_binary: bool):
@@ -75,7 +75,7 @@ async def bridge_handler(websocket, path=None):
         async for message in websocket:
             await parse_and_route_frame(message, isinstance(message, bytes))
     except websockets.exceptions.ConnectionClosed:
-        logger.warning("🔌 انفصل Nفق البشري الممرر للبيانات.")
+        logger.warning("🔌 انفصل النفق البشري الممرر للبيانات.")
 
 async def main():
     port = int(os.environ.get("PORT", 8765))
