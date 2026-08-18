@@ -48,7 +48,7 @@ async def websocket_endpoint(client_ws: WebSocket):
         
         # رابط خادم المنصة الرسمي المشفر والمستخدم في المكتبات غير الرسمية
         pocket_url = (
-    "wss://://pocketoption.com"
+    "wss://pocketoption.com"
     "/socket.io/?EIO=3"
     "&transport=websocket"
 )
