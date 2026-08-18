@@ -62,8 +62,8 @@ async def parse_and_route_frame(frame, is_binary: bool):
                 data_array = json.loads(json_str)
                 
                 if isinstance(data_array, list) and len(data_array) >= 2:
-                    action = data_array
-                    payload = data_array
+                    action = data_array[0]
+                    payload = data_array[1]
                     
                     # التقاط وتوثيق أمر تغيير أصل التداول والتايم فريم
                     if action == "changeSymbol" and isinstance(payload, dict):
@@ -87,7 +87,7 @@ async def parse_and_route_frame(frame, is_binary: bool):
                 if isinstance(data_array, list) and len(data_array) >= 2:
                     # تفعيل حالة انتظار المرفق الثنائي للحدث الحالي وحجزه في الذاكرة
                     state.expect_binary = True
-                    state.active_event = data_array
+                    state.active_event = data_array[0]
                     logger.info(f"🎯 [سجل] إشارة ممهدة للحدث الثنائي القادم: '{state.active_event}'")
             except json.JSONDecodeError:
                 logger.error(f"❌ [حزمة #{p_num}] خطأ فك JSON لإشارة التمهيد '451-': {frame[:50]}")
@@ -133,13 +133,20 @@ async def bridge_handler(websocket, path=None):
     except Exception as e:
         logger.error(f"🚨 [خطأ نفق] حدث خطأ غير متوقع في مجرى السيرفر: {str(e)}")
 
-# تشغيل السيرفر ليتوافق تماماً مع إعدادات بيئة Render الحالية (python3 server_scae.py)
-if __name__ == "__main__":
+async def main():
     import os
     port = int(os.environ.get("PORT", 8765))
     
-    start_server = websockets.serve(bridge_handler, "0.0.0.0", port)
-    logger.info(f"🚀 [تشغيل] سيرفر الـ Passive Processor يعمل ويستمع على المنفذ: {port}")
-    
-    asyncio.get_event_loop().run_until_complete(start_server)
-    asyncio.get_event_loop().run_forever()
+    # الطريقة الحديثة والمستقرة لبدء الخادم لعام 2026 دون تعارض حلقات الأحداث وسحق RuntimeError
+    async with websockets.serve(bridge_handler, "0.0.0.0", port):
+        logger.info(f"🚀 [تشغيل] سيرفر الـ Passive Processor يعمل بنجاح ويستمع على المنفذ: {port}")
+        await asyncio.Future()  # الحفاظ على السيرفر حياً ومعلقاً في وضع الاستماع دون توقف
+
+if __name__ == "__main__":
+    try:
+        # إطلاق الحلقة بطريقة asyncio.run الآمنة هندسياً لبيئات الاستضافة الحديثة
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("🛑 تم إيقاف السيرفر يدوياً.")
+    except Exception as e:
+        logger.error(f"🚨 خطأ حرج أثناء تشغيل السيرفر: {str(e)}")
