@@ -62,12 +62,15 @@ class POClient:
             try: await self.ws.close()
             except: pass
 
+        attempts = []  # نجمع سبب فشل كل سيرفر هنا لنرجعه للمتصفح
+
         for url in PO_SERVERS:
             host = url.split("//")[1].split("/")[0]
             try:
                 print(f"Trying {host}...")
                 ws = await self._try_connect(url)
                 if not ws:
+                    attempts.append(f"{host}: تعذر فتح اتصال WebSocket (تحقق من الشبكة/الحظر)")
                     continue
 
                 await ws.send("40")
@@ -79,6 +82,7 @@ class POClient:
                 await ws.send(f'42["auth",{json.dumps(auth)}]')
 
                 ok = False
+                last_event = None
                 for _ in range(20):
                     try:
                         msg = await asyncio.wait_for(ws.recv(), timeout=2)
@@ -86,11 +90,15 @@ class POClient:
                         r = self._parse(msg)
                         if r:
                             ev, d = r
+                            last_event = ev
                             if ev in ("successauth", "updateBalance", "balanceUpdated"):
                                 if isinstance(d, dict):
                                     b = d.get("balance", d.get("amount", 0))
                                     if b: self.balance = float(b)
                                 ok = True; break
+                            if ev in ("badauth", "unauthorized", "error", "connect_error"):
+                                last_event = f"{ev}: {json.dumps(d)[:120]}"
+                                break
                     except asyncio.TimeoutError:
                         continue
 
@@ -104,12 +112,16 @@ class POClient:
                     return True, f"Connected! ${self.balance:.2f} via {host}"
 
                 await ws.close()
-                print(f"  {host}: auth failed")
+                reason = last_event or "لم يصل رد successauth خلال المهلة (session خاطئ/منتهي على الأغلب)"
+                attempts.append(f"{host}: {reason}")
+                print(f"  {host}: auth failed - {reason}")
 
             except Exception as e:
+                attempts.append(f"{host}: استثناء - {str(e)[:80]}")
                 print(f"  {host}: {str(e)[:60]}")
 
-        return False, "فشل الاتصال بكل السيرفرات"
+        detail = " | ".join(attempts) if attempts else "لا توجد تفاصيل"
+        return False, f"فشل الاتصال بكل السيرفرات :: {detail}"
 
     async def _try_connect(self, url, timeout=8):
         headers = [
