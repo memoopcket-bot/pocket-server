@@ -62,7 +62,7 @@ class POClient:
             try: await self.ws.close()
             except: pass
 
-        attempts = []  # نجمع سبب فشل كل سيرفر هنا لنرجعه للمتصفح
+        attempts = []
 
         for url in PO_SERVERS:
             host = url.split("//")[1].split("/")[0]
@@ -124,14 +124,21 @@ class POClient:
         return False, f"فشل الاتصال بكل السيرفرات :: {detail}"
 
     async def _try_connect(self, url, timeout=8):
-        headers = [
-            ("Origin", "https://po.trade"),
-            ("Host", url.split("//")[1].split("/")[0]),
-            ("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"),
-            ("Cache-Control", "no-cache"),
-        ]
+        host = url.split("//")[1].split("/")[0]
+        
+        headers = {
+            "Origin": "https://pocketoption.com",
+            "Host": host,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept-Version": "4",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Accept-Language": "en-US,en;q=0.9,ar;q=0.8",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache"
+        }
+        
         last_err = None
-        for kw in [{"additional_headers": headers}, {"extra_headers": headers}, {}]:
+        for kw in [{"extra_headers": headers}, {"additional_headers": list(headers.items())}, {}]:
             try:
                 ws = await asyncio.wait_for(
                     websockets.connect(url, ping_interval=None, close_timeout=5, **kw),
@@ -144,7 +151,6 @@ class POClient:
             except Exception as e:
                 last_err = f"{type(e).__name__}: {str(e)[:150]}"
         return None, last_err
-
     def _parse(self, msg):
         try:
             if isinstance(msg, bytes): msg = msg.decode("utf-8", "ignore")
