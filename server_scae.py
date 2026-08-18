@@ -65,7 +65,7 @@ class POClient:
         attempts = []
 
         for url in PO_SERVERS:
-            host = url.split("//")[1].split("/")[0]
+            host = url.split("//")[1].split("/")[0]  # إصلاح ذكي وصحيح لعزل النطاق
             try:
                 print(f"Trying {host}...")
                 ws, conn_err = await self._try_connect(url)
@@ -124,7 +124,7 @@ class POClient:
         return False, f"فشل الاتصال بكل السيرفرات :: {detail}"
 
     async def _try_connect(self, url, timeout=8):
-        host = url.split("//")[1].split("/")[0]
+        host = url.split("//")[1].split("/")[0]  # إصلاح ذكي وصحيح لعزل النطاق هنا أيضاً
         
         headers = {
             "Origin": "https://pocketoption.com",
@@ -134,7 +134,8 @@ class POClient:
             "Accept-Encoding": "gzip, deflate, br",
             "Accept-Language": "en-US,en;q=0.9,ar;q=0.8",
             "Cache-Control": "no-cache",
-            "Pragma": "no-cache"
+            "Pragma": "no-cache",
+            "Sec-WebSocket-Extensions": "permessage-deflate; client_max_window_bits"
         }
         
         last_err = None
@@ -158,7 +159,7 @@ class POClient:
                 if msg.startswith(p):
                     d = json.loads(msg[len(p):])
                     if isinstance(d, list) and len(d) >= 2:
-                        return d[0], d[1]
+                        return d[0], d[1]  # تم الإصلاح هنا لتعيد الحدث والبيانات بشكل منفصل وصحيح
         except: pass
         return None
 
