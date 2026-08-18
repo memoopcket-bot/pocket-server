@@ -3,85 +3,101 @@ import logging
 import asyncio
 import websockets
 
-# إعداد السجلات الاحترافية لمراقبة الأداء
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("PO_Passive_Bridge_2026")
+# إعداد السجلات الاحترافية لمراقبة دقة تدفق البيانات بالملي ثانية
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s.%(msecs)03d | %(levelname)s | %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger("PO_Passive_Processor")
 
-# جداول تخزين البيانات اللحظية في الذاكرة (مصفوفات سريعة جداً بقيمة O(1))
+# جداول لتخزين الأسعار الحية وبيانات التداول الاجتماعي في الذاكرة
 LIVE_MARKET_DATA = {}
 SOCIAL_TRADING_DATA = {}
 
 class StreamState:
-    """مراقبة تتابع حزم Socket.io الثنائية لمنع تداخل البيانات"""
+    """إدارة حالة النفق لتوقع وتوجيه الرسائل الثنائية (Binary Frames) ومنع التداخل"""
     def __init__(self):
         self.expect_binary = False
         self.active_event = None
         self.tracked_asset = "UNKNOWN"
         self.current_period = 60
+        self.packet_counter = 0  # عدّاد لمراقبة حجم التدفق اللحظي وكشف الخلل
 
 state = StreamState()
 
 async def parse_and_route_frame(frame, is_binary: bool):
     """
-    المحلل المعماري للباكيتات: يتلقى الحزم من نفق المتصفح البشري ويفرزها فوراً.
+    المحلل المعماري للباكيتات: يستقبل الحزم الممررة من نفق المتصفح البشري ويفرزها فوراً.
     """
-    # أولاً: إذا كانت الحزمة القادمة عبارة عن بايتات ثنائية (Binary Payload)
+    state.packet_counter += 1
+    p_num = state.packet_counter
+
+    # --- أولاً: معالجة مجرى البيانات الثنائية (Binary Data Pipeline) ---
     if is_binary:
+        logger.info(f"📥 [حزمة #{p_num}] استلمت رسالة ثنائية (Binary Payload) | الحجم: {len(frame)} بايت")
+        
         if state.expect_binary and state.active_event:
-            await decode_binary_payload(state.active_event, frame)
-            # إعادة تصفير الراية فوراً للاستعداد للحزمة القادمة في أجزاء من الملي ثانية
+            await decode_binary_payload(p_num, state.active_event, frame)
+            # إعادة تصفير الراية فوراً للاستعداد للحزمة اللحظية التالية في أجزاء من الملي ثانية
             state.expect_binary = False
             state.active_event = None
+        else:
+            # حالة حرجة: وصول بايتات ثنائية بدون تمهيد نصي مسبق (مشكلة تداخل شبكة)
+            logger.warning(f"⚠️ [حزمة #{p_num}] خلل تزامن! وصلت بايتات ثنائية لكن السيرفر لم يكن ينتظر حدثاً ممهداً.")
         return
 
-    # ثانياً: إذا كانت الحزمة نصية (Text Payload)
+    # --- ثانياً: معالجة مجرى الرسائل النصية المقروءة (Text Data Pipeline) ---
     if isinstance(frame, str):
-        # تغطية الحالات الحرجة: تجاهل رسائل النبض والحفاظ على الاتصال (Ping/Pong)
+        logger.info(f"📝 [حزمة #{p_num}] استلمت رسالة نصية (Text Frame) -> {frame[:120]}")
+
+        # تغطية الحالات الحرجة: تجاهل رسائل النبض والحفاظ على الاتصال (Ping/Pong / Heartbeat)
         if frame in ["2", "3"] or frame.startswith("42[\"ps\""):
             return
 
-        # رصد قذائف الأوامر الصادرة من المتصفح (Outbound Client Actions)
+        # رصد قذائف الأوامر الصادرة من المتصفح البشري (Outbound Client Actions)
         if frame.startswith("42"):
             try:
                 json_str = frame[2:]
                 data_array = json.loads(json_str)
                 
                 if isinstance(data_array, list) and len(data_array) >= 2:
-                    action = data_array[0]
-                    payload = data_array[1]
+                    action = data_array
+                    payload = data_array
                     
+                    # التقاط وتوثيق أمر تغيير أصل التداول والتايم فريم
                     if action == "changeSymbol" and isinstance(payload, dict):
                         state.tracked_asset = payload.get("asset", "UNKNOWN")
                         state.current_period = payload.get("period", 60)
-                        logger.info(f"🔄 المتصفح غير الزوج -> {state.tracked_asset} ({state.current_period}s)")
+                        logger.info(f"🔄 [سجل] المتصفح غيّر أصل التداول -> {state.tracked_asset} ({state.current_period}s)")
                         
+                    # التقاط وتوثيق أمر الاشتراك الحي في الأسعار
                     elif action == "subFor":
                         state.tracked_asset = str(payload)
-                        logger.info(f"📡 تفعيل اشتراك البث اللحظي للزوج -> {state.tracked_asset}")
+                        logger.info(f"📡 [سجل] تفعيل بث الاشتراك للزوج الحالي -> {state.tracked_asset}")
             except json.JSONDecodeError:
-                pass
+                logger.error(f"❌ [حزمة #{p_num}] خطأ فك JSON لحزمة صادر المتصفح '42': {frame[:50]}")
 
         # رصد الإشارات التمهيدية للأحداث الثنائية الواردة من السيرفر (Inbound Binary Events)
         elif frame.startswith("451-"):
             try:
-                json_str = frame[4:]
+                json_str = frame[4:]  # تخطي البادئة "451-"
                 data_array = json.loads(json_str)
                 
                 if isinstance(data_array, list) and len(data_array) >= 2:
-                    event_name = data_array[0]
-                    
-                    # تفعيل حالة انتظار المرفق الثنائي للحدث الحالي
+                    # تفعيل حالة انتظار المرفق الثنائي للحدث الحالي وحجزه في الذاكرة
                     state.expect_binary = True
-                    state.active_event = event_name
+                    state.active_event = data_array
+                    logger.info(f"🎯 [سجل] إشارة ممهدة للحدث الثنائي القادم: '{state.active_event}'")
             except json.JSONDecodeError:
-                pass
+                logger.error(f"❌ [حزمة #{p_num}] خطأ فك JSON لإشارة التمهيد '451-': {frame[:50]}")
 
-async def decode_binary_payload(event_type: str, binary_bytes: bytes):
+async def decode_binary_payload(packet_id: int, event_type: str, binary_bytes: bytes):
     """
-    تفكيك وقراءة مصفوفة البايتات الحية وتحديث جداول البيانات اللحظية فوراً.
+    تفكيك مصفوفة البايتات الحية وتحديث جداول البيانات الفورية في الذاكرة.
     """
     try:
-        # فك ترميز البايتات الممررة إلى نص مقروء لاستخراج قيم الأرقام الكسرية
+        # فك ترميز البايتات الممررة إلى نص مقروء لاستخراج قيم الأسعار
         decoded_data = binary_bytes.decode('utf-8', errors='ignore')
         
         if event_type == "updateStream":
@@ -90,35 +106,40 @@ async def decode_binary_payload(event_type: str, binary_bytes: bytes):
                 "raw_price_stream": decoded_data[:100],
                 "period": state.current_period
             }
-            logger.info(f"📈 [داتا أسعار ثنائية] {state.tracked_asset} -> {decoded_data[:60]}")
+            logger.info(f"📊 [تفكيك ناجح #{packet_id}] داتا أسعار لـ {state.tracked_asset} -> {decoded_data[:60]}")
             
         elif event_type == "chafor":
+            # مسار فك تشفير إحصائيات التداول الاجتماعي والدردشة لمنع تداخلها مع الأسعار
             SOCIAL_TRADING_DATA[state.tracked_asset] = decoded_data[:100]
-            logger.info(f"💬 [داتا تداول اجتماعي ثنائية] -> {decoded_data[:50]}")
+            logger.info(f"💬 [تفكيك ناجح #{packet_id}] داتا تداول اجتماعي ودردشة ثنائية.")
             
         elif event_type == "updateCharts":
-            logger.info(f"📊 [داتا شموع ثنائية] تم التحديث بنجاح.")
+            logger.info(f"📉 [تفكيك ناجح #{packet_id}] داتا شموع ورسوم بيانية ثنائية.")
             
     except Exception as e:
-        logger.error(f"❌ خطأ في معالجة بايتات الحدث {event_type}: {str(e)}")
+        # تسجيل الخطأ الحرج المسبب للمشكلة دون السماح بانهيار السيرفر
+        logger.error(f"🚨 [خطأ حرج في الحزمة #{packet_id}] فشل معالجة بايتات الحدث '{event_type}': {str(e)}")
 
-async def bridge_handler(websocket):
+async def bridge_handler(websocket, path=None):
     """المستقبل الصامت لحزم النفق البشري (Passive Bridge Consumer)"""
-    logger.info("🔌 نفق المتصفح البشري متصل بنجاح! خادم Render يستقبل التدفق الثنائي الآن...")
+    logger.info("🔌 [اتصال] نفق المتصفح البشري متصل بنجاح! خادم Render يستقبل التدفق الآن...")
+    state.packet_counter = 0  # إعادة تصفير العداد عند كل اتصال جديد لمراقبة دقيقة
     try:
         async for message in websocket:
             is_bin = isinstance(message, bytes)
             await parse_and_route_frame(message, is_bin)
     except websockets.exceptions.ConnectionClosed:
-        logger.info("🔌 انفصل النفق البشري مؤقتاً. بانتظار العودة الحية لإعادة المزامنة...")
+        logger.warning("🔌 [انفصال] انقطع اتصال النفق البشري الممرر للبيانات. بانتظار العودة...")
+    except Exception as e:
+        logger.error(f"🚨 [خطأ نفق] حدث خطأ غير متوقع في مجرى السيرفر: {str(e)}")
 
-# تشغيل السيرفر ليتوافق تماماً مع إعدادات بيئة Render الحالية
+# تشغيل السيرفر ليتوافق تماماً مع إعدادات بيئة Render الحالية (python3 server_scae.py)
 if __name__ == "__main__":
     import os
     port = int(os.environ.get("PORT", 8765))
     
     start_server = websockets.serve(bridge_handler, "0.0.0.0", port)
-    logger.info(f"🚀 خادم الـ Passive Bridge النهائي يعمل ويستمع على المنفذ: {port}")
+    logger.info(f"🚀 [تشغيل] سيرفر الـ Passive Processor يعمل ويستمع على المنفذ: {port}")
     
-    asyncio.get_event_loop().run_complete(start_server)
+    asyncio.get_event_loop().run_until_complete(start_server)
     asyncio.get_event_loop().run_forever()
