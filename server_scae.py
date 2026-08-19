@@ -16,10 +16,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# تقسيم الأزواج إلى مجموعتين حسب نوع الصفحة
-FOREX_PAIRS = ["EURUSD", "GBPUSD", "USDJPY"]
-OTC_PAIRS = ["EURUSD_otc", "GBPUSD_otc", "USDJPY_otc", "EURGBP_otc", "AUDUSD_otc"]
-ALL_PAIRS = FOREX_PAIRS + OTC_PAIRS
+# ═══════════════════════════════════
+# كل الأزواج المتاحة في Pocket Option
+# ═══════════════════════════════════
+ALL_PAIRS = [
+    # Forex
+    "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "USDCAD", "AUDUSD", "NZDUSD",
+    "EURGBP", "EURJPY", "EURCHF", "EURAUD", "EURCAD", "EURNZD",
+    "GBPJPY", "GBPCHF", "GBPAUD", "GBPCAD", "GBPNZD",
+    "AUDJPY", "AUDCHF", "AUDCAD", "AUDNZD",
+    "CADJPY", "CADCHF", "CHFJPY", "NZDJPY", "NZDCHF", "NZDCAD",
+    # OTC
+    "EURUSD_otc", "GBPUSD_otc", "USDJPY_otc", "USDCHF_otc", "USDCAD_otc",
+    "AUDUSD_otc", "NZDUSD_otc", "EURGBP_otc", "EURJPY_otc", "EURCHF_otc",
+    "EURAUD_otc", "EURCAD_otc", "EURNZD_otc", "GBPJPY_otc", "GBPCHF_otc",
+    "GBPAUD_otc", "GBPCAD_otc", "GBPNZD_otc", "AUDJPY_otc", "AUDCHF_otc",
+    "AUDCAD_otc", "AUDNZD_otc", "CADJPY_otc", "CADCHF_otc", "CHFJPY_otc",
+    "NZDJPY_otc", "NZDCHF_otc", "NZDCAD_otc",
+    # المعادن
+    "XAUUSD", "XAGUSD", "XAUUSD_otc", "XAGUSD_otc"
+]
 
 def log_to_file(message):
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
@@ -28,59 +44,61 @@ def log_to_file(message):
 
 @app.get("/")
 def home():
-    return {"status": "running", "message": "Active"}
+    return {"status": "running", "message": "Active", "pairs_count": len(ALL_PAIRS)}
 
 @app.websocket("/ws")
 async def websocket_endpoint(client_ws: WebSocket):
     await client_ws.accept()
-    log_to_file("A new web page/client connected to the server.")
+    log_to_file("A new client connected to the server.")
     
     pocket_ws = None
     heartbeat_task = None
     
     try:
-        # استقبال البيانات الأولى من الصفحة
+        # استقبال SSID من الصفحة
         init_data = await client_ws.receive_text()
         init_json = json.loads(init_data)
         ssid = init_json.get("ssid")
         
-        # ميزة التصفية: تفرز الصفحة بناءً على نوع الطلب القادم منها (forex أو otc)
-        # إذا لم ترسل الصفحة نوعاً، ستقوم بعرض كل شيء كالعادة
-        page_type = init_json.get("page_type", "all") 
+        if not ssid:
+            await client_ws.send_json({"status": "error", "message": "SSID is required"})
+            return
         
         raw_url = os.getenv("POCKET_URL")
         if not raw_url:
-            log_to_file("Error: POCKET_URL variable not found in Render settings.")
+            log_to_file("Error: POCKET_URL variable not found.")
             await client_ws.send_json({"status": "error", "message": "POCKET_URL not configured"})
             return
 
         pocket_url = raw_url.strip('"').strip("'").strip()
-        log_to_file(f"Target URL cleaned for this session.")
-
+        
         custom_headers = {
             "Origin": "https://po.market",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         }
         
-        log_to_file(f"Connecting page ({page_type}) to Pocket Option Server...")
+        log_to_file("Connecting to Pocket Option Server...")
         async with websockets.connect(pocket_url, extra_headers=custom_headers) as pocket_ws:
-            log_to_file("Connection stable with Pocket Option.")
+            log_to_file("Connected to Pocket Option.")
             
-            # بروتوكول EIO=4 فتح الاتصال
+            # فتح الاتصال EIO=4
             await pocket_ws.send("40")
             
-            # التوثيق بالـ SSID
+            # التوثيق
             auth_packet = f'42["auth", {{"session": "{ssid}", "isDemo": 1, "uid": 999999, "platform": 1}}]'
             await pocket_ws.send(auth_packet)
-            log_to_file("Auth token delivered successfully.")
+            log_to_file("Auth sent.")
             
             await client_ws.send_json({"status": "platform_connected"})
             
-            # الاشتراك في الأزواج للمنصة كاملة
+            # الاشتراك في كل الأزواج
             for pair in ALL_PAIRS:
                 sub_packet = f'42["changeSymbol", {{"asset": "{pair}", "timeframe": 60}}]'
                 await pocket_ws.send(sub_packet)
-
+                await asyncio.sleep(0.05)  # تأخير بسيط بين الاشتراكات
+            
+            log_to_file(f"Subscribed to {len(ALL_PAIRS)} pairs.")
+            
             async def send_heartbeat():
                 try:
                     while pocket_ws.open:
@@ -92,43 +110,43 @@ async def websocket_endpoint(client_ws: WebSocket):
             heartbeat_task = asyncio.create_task(send_heartbeat())
 
             async for raw_message in pocket_ws:
+                # نبضات القلب
                 if raw_message == "2":
                     await pocket_ws.send("3")
                     continue
                 
+                # محاولة التقاط أي سعر
                 if raw_message.startswith("42"):
                     try:
                         parsed = json.loads(raw_message[2:])
-                        if isinstance(parsed, list) and len(parsed) > 1 and parsed[0] == "tick":
-                            tick_info = parsed[1]
-                            asset_name = tick_info.get("asset")
+                        if isinstance(parsed, list) and len(parsed) > 1:
+                            event_name = parsed[0]
+                            data = parsed[1]
                             
-                            # الفلترة الذكية: إرسال الأسعار للصفحة بناءً على نوعها المفضل
-                            should_send = False
-                            if page_type == "forex" and asset_name in FOREX_PAIRS:
-                                should_send = True
-                            elif page_type == "otc" and asset_name in OTC_PAIRS:
-                                should_send = True
-                            elif page_type == "all":
-                                should_send = True
+                            # التقاط الأسعار من أي حدث
+                            if isinstance(data, dict):
+                                asset = data.get("asset") or data.get("symbol") or data.get("active")
+                                price = data.get("price") or data.get("bid") or data.get("ask") or data.get("close") or data.get("value")
                                 
-                            if should_send:
-                                # إرسال البيانات النظيفة للجدول مباشرة
-                                await client_ws.send_json({
-                                    "status": "tick",
-                                    "asset": asset_name,
-                                    "price": tick_info.get("price")
-                                })
-                    except Exception:
+                                if asset and price is not None:
+                                    # إرسال السعر للصفحة
+                                    await client_ws.send_json({
+                                        "status": "tick",
+                                        "asset": asset,
+                                        "price": float(price)
+                                    })
+                    except Exception as e:
+                        # تجاهل الأخطاء في تحليل الرسائل
                         pass
-                    
-                    # تمرير النص الخام أيضاً للتوافق الكامل
-                    await client_ws.send_text(raw_message)
 
     except WebSocketDisconnect:
-        log_to_file("One of the connected pages closed.")
+        log_to_file("Client disconnected.")
     except Exception as e:
-        log_to_file(f"Error in session: {str(e)}")
+        log_to_file(f"Error: {str(e)}")
+        try:
+            await client_ws.send_json({"status": "error", "message": str(e)})
+        except:
+            pass
     finally:
         if heartbeat_task:
             heartbeat_task.cancel()
