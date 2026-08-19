@@ -22,8 +22,10 @@ ALL_PAIRS = [
 ]
 
 def log_to_file(message):
+    """دالة مخصصة تقوم بتصفير ومسح السجلات القديمة فوراً وكتابة الجديد فقط"""
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-    with open("pocket_project_log.txt", "a", encoding="utf-8") as f:
+    # تم استخدام 'w' بدلاً من 'a' لتنظيف الشاشة من الأخطاء القديمة المتراكمة
+    with open("pocket_project_log.txt", "w", encoding="utf-8") as f:
         f.write(f"[{timestamp}] {message}\n")
 
 @app.get("/")
@@ -33,7 +35,7 @@ def home():
 @app.websocket("/ws")
 async def websocket_endpoint(client_ws: WebSocket):
     await client_ws.accept()
-    log_to_file("تم اتصال صفحة الويب بالسيرفر السحابي بنجاح.")
+    log_to_file("تم اتصال صفحة الويب بالسيرفر السحابي بنجاح [الضوء البرتقالي].")
     
     pocket_ws = None
     try:
@@ -41,11 +43,11 @@ async def websocket_endpoint(client_ws: WebSocket):
         init_json = json.loads(init_data)
         ssid = init_json.get("ssid")
         
-        # الرابط مشفر تماماً على هيئة نص عشوائي لحمايته من تغيرات الترجمة التلقائية
+        # الرابط مشفر تماماً لحمايته من الترجمة التلقائية وتغيير الحروف
         cipher_text = "d3NzOi8vYXBpLWluLnBvY2tldG9wdGlvbi5jb206ODA5NS9zb2NrZXQuaW8vP0VJTz0zJnRyYW5zcG9ydD13ZWJzb2NrZXQ="
         pocket_url = base64.b64decode(cipher_text).decode("utf-8")
         
-        log_to_file("جاري فتح الاتصال الآمن بالمنصة...")
+        log_to_file("جاري فتح الاتصال الآمن والمباشر بالمنصة...")
         
         async with websockets.connect(pocket_url) as pocket_ws:
             log_to_file("تم الاتصال الفيزيائي بخادم المنصة بنجاح.")
@@ -55,6 +57,7 @@ async def websocket_endpoint(client_ws: WebSocket):
             await pocket_ws.send(auth_packet)
             log_to_file("تم إرسال حزمة المصادقة الجلسية بنجاح.")
             
+            # إرسال إشارة النجاح للواجهة لتشغيل الضوء الأخضر
             await client_ws.send_json({"status": "platform_connected"})
             
             for pair in ALL_PAIRS:
