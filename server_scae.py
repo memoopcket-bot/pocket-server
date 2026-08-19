@@ -22,9 +22,7 @@ ALL_PAIRS = [
 ]
 
 def log_to_file(message):
-    """دالة مخصصة تقوم بتصفير ومسح السجلات القديمة فوراً وكتابة الجديد فقط"""
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-    # تم استخدام 'w' بدلاً من 'a' لتنظيف الشاشة من الأخطاء القديمة المتراكمة
     with open("pocket_project_log.txt", "w", encoding="utf-8") as f:
         f.write(f"[{timestamp}] {message}\n")
 
@@ -35,7 +33,7 @@ def home():
 @app.websocket("/ws")
 async def websocket_endpoint(client_ws: WebSocket):
     await client_ws.accept()
-    log_to_file("تم اتصال صفحة الويب بالسيرفر السحابي بنجاح [الضوء البرتقالي].")
+    log_to_file("Web client connected successfully.")
     
     pocket_ws = None
     try:
@@ -43,21 +41,19 @@ async def websocket_endpoint(client_ws: WebSocket):
         init_json = json.loads(init_data)
         ssid = init_json.get("ssid")
         
-        # الرابط مشفر تماماً لحمايته من الترجمة التلقائية وتغيير الحروف
         cipher_text = "d3NzOi8vYXBpLWluLnBvY2tldG9wdGlvbi5jb206ODA5NS9zb2NrZXQuaW8vP0VJTz0zJnRyYW5zcG9ydD13ZWJzb2NrZXQ="
         pocket_url = base64.b64decode(cipher_text).decode("utf-8")
         
-        log_to_file("جاري فتح الاتصال الآمن والمباشر بالمنصة...")
+        log_to_file("Connecting to platform server...")
         
         async with websockets.connect(pocket_url) as pocket_ws:
-            log_to_file("تم الاتصال الفيزيائي بخادم المنصة بنجاح.")
+            log_to_file("Physical connection established.")
             await pocket_ws.send("40")
             
             auth_packet = f'42["auth", {{"session": "{ssid}", "isDemo": 1, "uid": 999999, "platform": 1}}]'
             await pocket_ws.send(auth_packet)
-            log_to_file("تم إرسال حزمة المصادقة الجلسية بنجاح.")
+            log_to_file("Auth packet sent successfully.")
             
-            # إرسال إشارة النجاح للواجهة لتشغيل الضوء الأخضر
             await client_ws.send_json({"status": "platform_connected"})
             
             for pair in ALL_PAIRS:
@@ -91,9 +87,9 @@ async def websocket_endpoint(client_ws: WebSocket):
                     pass
 
     except WebSocketDisconnect:
-        log_to_file("تم إغلاق اتصال صفحة الويب بالسيرفر السحابي.")
+        log_to_file("Web client disconnected.")
     except Exception as e:
-        log_to_file(f"حدث خطأ في معالجة البروتوكول: {str(e)}")
+        log_to_file(f"Protocol error: {str(e)}")
         try:
             await client_ws.send_json({"status": "error", "message": str(e)})
         except:
