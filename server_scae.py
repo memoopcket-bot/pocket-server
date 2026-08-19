@@ -2,7 +2,7 @@ import asyncio
 import json
 import datetime
 import websockets
-import base64
+import os
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -28,12 +28,12 @@ def log_to_file(message):
 
 @app.get("/")
 def home():
-    return {"status": "running", "message": "Pocket Option Cloud Server is Active"}
+    return {"status": "running", "message": "Active"}
 
 @app.websocket("/ws")
 async def websocket_endpoint(client_ws: WebSocket):
     await client_ws.accept()
-    log_to_file("Web client connected successfully.")
+    log_to_file("Web client connected.")
     
     pocket_ws = None
     try:
@@ -41,18 +41,22 @@ async def websocket_endpoint(client_ws: WebSocket):
         init_json = json.loads(init_data)
         ssid = init_json.get("ssid")
         
-        cipher_text = "d3NzOi8vYXBpLWluLnBvY2tldG9wdGlvbi5jb206ODA5NS9zb2NrZXQuaW8vP0VJTz0zJnRyYW5zcG9ydD13ZWJzb2NrZXQ="
-        pocket_url = base64.b64decode(cipher_text).decode("utf-8")
+        # قراءة الرابط تلقائياً من إعدادات ريندر بأمان تام وبدون أي أخطاء لغة
+        pocket_url = os.getenv("POCKET_URL")
         
-        log_to_file("Connecting to platform server...")
+        if not pocket_url:
+            log_to_file("Error: POCKET_URL variable not found in Render settings.")
+            return
+
+        log_to_file(f"Connecting to: {pocket_url[:30]}...")
         
         async with websockets.connect(pocket_url) as pocket_ws:
-            log_to_file("Physical connection established.")
+            log_to_file("Connection stable.")
             await pocket_ws.send("40")
             
             auth_packet = f'42["auth", {{"session": "{ssid}", "isDemo": 1, "uid": 999999, "platform": 1}}]'
             await pocket_ws.send(auth_packet)
-            log_to_file("Auth packet sent successfully.")
+            log_to_file("Auth token delivered.")
             
             await client_ws.send_json({"status": "platform_connected"})
             
@@ -87,9 +91,9 @@ async def websocket_endpoint(client_ws: WebSocket):
                     pass
 
     except WebSocketDisconnect:
-        log_to_file("Web client disconnected.")
+        log_to_file("Disconnected.")
     except Exception as e:
-        log_to_file(f"Protocol error: {str(e)}")
+        log_to_file(f"Error: {str(e)}")
         try:
             await client_ws.send_json({"status": "error", "message": str(e)})
         except:
